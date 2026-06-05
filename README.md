@@ -3,7 +3,7 @@
 A lightweight **digital timing / waveform editor** with a Windows 95/XP retro look,
 built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
-templates, and export to PNG or EPS.
+templates, and export to PNG, SVG or EPS.
 
 > Status: prototype **v1.7**. Single-file application (`retrowave.py`), no
 > third-party dependencies required to run (Pillow is optional, only for PNG export).
@@ -32,14 +32,31 @@ templates, and export to PNG or EPS.
 - Multi-select signals in the name column (Ctrl / Shift click); per-signal actions
   live in a right-click menu (color, offset, rename, delete, grouping).
 
-**Groups** (single level, designed to extend to nesting later)
-- Create a new group from selected signals, **merge** signals or whole groups into
-  a chosen target group, and **remove** individual signals from a group.
-- Collapse / expand a group from its header row (collapsed groups show the header
-  only).
-- Group color cascades to member waveforms (a per-signal color overrides it).
-- Group members are kept contiguous automatically, so the on-screen layout and
-  click hit-testing always stay in sync.
+**Groups** (arbitrary nesting depth)
+- Create a new group from selected signals; **merge** signals into a group, or
+  **nest** one group inside another (a group merged into another becomes a
+  subgroup), to any depth.
+- **Dissolve** a group (promote its children up one level, keeping any subgroups) or
+  **delete** a group together with its whole subtree; apply a single **group-wide
+  offset** to all members (including nested) at once.
+- Collapse / expand a group from its header row (collapsed groups hide their whole
+  subtree); headers and members indent by nesting depth.
+- Group color cascades to descendant waveforms (nearest ancestor group wins; a
+  per-signal color still overrides it).
+- Structure lives in a separate **group tree** (metadata + nesting); signals stay a
+  flat pool referenced by stable id, kept in sync with the tree's leaf order — so
+  index-based editing, anchors, and hit-testing all keep working.
+
+**Reordering & drag merge/split**
+- Drag a signal name to move it: drop onto a group header's lower half or inside a
+  group to **merge** it in at the exact cursor position (merge + reorder in one
+  move); drop on a header's upper half to place it just before that group; drop
+  among top-level signals to move it **out** to the top level.
+- Drag a group header to move the whole group; dropping it onto another group
+  **nests** it as a subgroup (it can't be dropped into its own descendant).
+- Drag starts only after moving past half a row height. While dragging, the view
+  dims, the container the item would drop into is highlighted, and an insertion line
+  shows the exact landing spot.
 
 **Copy & paste**
 - Cell-range copy/paste (auto-adds rows when needed).
@@ -59,8 +76,12 @@ templates, and export to PNG or EPS.
 **Save / export**
 - Project save & load as JSON (includes view geometry, colors, and groups).
 - **PNG export with no Ghostscript dependency** — rendering is done directly with
-  Pillow, reusing the exact same drawing code as the on-screen canvas. Only
-  `pip install pillow` is needed.
+  Pillow, reusing the exact same drawing code as the on-screen canvas. A resolution
+  multiplier (1×–4×) re-renders at higher pixel density for crisp output (not an
+  upscale). Only `pip install pillow` is needed.
+- **SVG export (vector)** — a dedicated SVG backend reuses the same drawing engine,
+  producing infinitely scalable, editable output (and the dashed period grid is
+  preserved). No third-party dependency.
 - EPS / PostScript export uses tkinter's built-in PostScript writer (zero
   dependencies).
 
@@ -123,7 +144,7 @@ immediately.
 
 **Save / export** (`File` menu)
 - *Save* / *Open* for project JSON.
-- *Export* to PNG (needs Pillow) or EPS / PS.
+- *Export* to PNG (needs Pillow; choose a 1×–4× resolution), SVG (vector), or EPS / PS.
 
 ### Keyboard shortcuts
 
@@ -163,18 +184,22 @@ never duplicated.
 
 ---
 
+## Interoperability
+
+- **WaveDrom JSON export** (*File → Export WaveDrom JSON*) maps signals, groups
+  (nested arrays), per-signal phase, and anchors/relationship lines (node/edge) to
+  the WaveDrom schema, so diagrams can be shared on GitHub/wikis or rendered by
+  WaveDrom tooling. Colors and the custom slope styling are not carried over —
+  WaveDrom redraws with its own skin — so the native RetroWave format remains the
+  source of truth.
+
 ## Roadmap
 
-- **Phase D — Programmable / headless interface.** A CLI that renders a spec to
-  PNG/EPS without the GUI (the headless renderer already exists), plus an
-  LLM-friendly input format so an AI tool can turn a textual spec or document into
-  a waveform automatically. A WaveDrom-style wave-string DSL is the leading
-  candidate for the AI-facing input.
-- **Nested groups.** The data model and layout layer were designed so the single
-  level can grow into a tree without touching the data/event layers.
-- **Quality-of-life:** negative offsets (phase-left), incremental redraw for very
-  large diagrams, and dashed period grid lines in PNG output (currently solid in
-  PNG; EPS keeps dashes).
+- **VCD import.** Render deterministic simulation output (the source of truth in a
+  Verilog flow) into clean, publication-ready diagrams.
+- **Quality-of-life:** multi-select drag, negative offsets (phase-left), incremental
+  redraw for very large diagrams, and dashed period grid lines in PNG output
+  (currently solid in PNG; SVG/EPS keep dashes).
 
 ---
 

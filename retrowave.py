@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RetroWave - 數位電路波型繪製工具 (原型 v1.7)
+RetroWave - 數位電路波型繪製工具 (原型 v1.17)
 本版重點 :
   1. 所有轉換線斜率統一 = 擺幅/tw (BUS↔HiZ 不再不一致)。
   2/3/4. BUS 拖曳：原為 BUS 的格保留延續、非 BUS 的格才取代 (不蓋既有資料)。
@@ -15,6 +15,11 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, colorchooser
 import json
 import os
+import math
+from collections import namedtuple
+
+# 可見列：kind='group'|'sig'；ref=gid 或 signal index；depth=巢狀深度；gcol=繼承的群組色
+Row = namedtuple("Row", "kind ref depth gcol")
 
 SHIFT_MASK = 0x0001
 CTRL_MASK = 0x0004
@@ -68,16 +73,32 @@ class Geometry:
         self.level_hi = float(d.get("level_hi", self.level_hi))
         self.level_lo = float(d.get("level_lo", self.level_lo))
 
+    def copy_scaled(self, k):
+        """回傳一份座標等比放大 k 倍的幾何 (比例欄位不變)；供高解析點陣匯出。"""
+        g = Geometry()
+        g.period_w = int(round(self.period_w * k)); g.row_h = int(round(self.row_h * k))
+        g.header_h = int(round(self.header_h * k)); g.name_w = int(round(self.name_w * k))
+        g.ramp_ratio = self.ramp_ratio
+        g.level_hi = self.level_hi; g.level_lo = self.level_lo
+        return g
+
 
 class Model:
     def __init__(self):
         self.n_periods = DEFAULT_PERIODS; self.signals = []
-        self.groups = {}              # gid -> {name, collapsed, color}
-        self._gid_seq = 0
+        self.groups = {}              # gid -> group 節點 (由群組樹重建，供既有程式以 gid 取 meta)
+        self.group_tree = []          # 結構真相：巢狀群組樹 (節點見下)，葉以 sid 參考訊號實體
+        self.nodes = {}               # nid -> {sid, period, edge}  (標注錨點)
+        self.edges = []               # [{frm, to, label, style}]   (關係線)
+        self._gid_seq = 0; self._sid_seq = 0
         self.add_signal("CLK", fill="CLK")
         self.add_signal("RST_N", fill="H")
         self.add_signal("DATA", fill="L")
         self._demo()
+
+    def _new_sid(self):
+        self._sid_seq += 1
+        return self._sid_seq
 
     def _demo(self):
         d = self.signals[2]["cells"]
@@ -91,12 +112,19 @@ class Model:
     def add_signal(self, name=None, fill="L"):
         if name is None:
             name = f"SIG{len(self.signals)}"
+        sid = self._new_sid()
         self.signals.append({"name": name, "offset": 0.0, "color": None, "group": None,
+                             "sid": sid,
                              "cells": [self.new_cell(fill) for _ in range(self.n_periods)]})
+        self.group_tree.append({"type": "sig", "sid": sid})   # 新訊號落在頂層 (葉序==signals 序)
 
     def remove_signal(self, idx):
         if 0 <= idx < len(self.signals):
+            sid = self.signals[idx]["sid"]
             del self.signals[idx]
+            self._detach_sid(sid)
+            self._prune_empty_groups(self.group_tree)
+            self._reindex_groups()
 
     def set_n_periods(self, n):
         n = max(1, int(n))
@@ -112,138 +140,417 @@ class Model:
         if 0 <= sig < len(self.signals) and 0 <= per < self.n_periods:
             self.signals[sig]["cells"][per] = self.new_cell(t, text)
 
-    # ---- 群組 (視圖/標籤層；訊號本體仍只存在 self.signals) ----
+    # ---- 群組 (群組樹為結構真相；signals 維持與 DFS 葉序一致；signal['group']=直接父 gid 快取) ----
     def layout(self):
-        """回傳可見列清單：[('group', gid) | ('sig', signal_index), ...]。
-        每次重繪即時重建，訊號列只放整數索引 (直接陣列定址，非搜尋/雜湊)。"""
-        rows = []; i = 0; n = len(self.signals)
-        while i < n:
-            g = self.signals[i].get("group")
-            if g and g in self.groups:
-                rows.append(("group", g))
-                collapsed = self.groups[g].get("collapsed", False)
-                j = i
-                while j < n and self.signals[j].get("group") == g:
-                    if not collapsed:
-                        rows.append(("sig", j))
-                    j += 1
-                i = j
-            else:
-                rows.append(("sig", i)); i += 1
+        """遞迴展開群組樹，回傳可見列 Row(kind, ref, depth, gcol)。
+        群組列 ref=gid、gcol=該群自身色；訊號列 ref=signal index、gcol=繼承最近祖先群組色。
+        折疊的群組不展開其 children。"""
+        rows = []
+        sid2idx = {s["sid"]: i for i, s in enumerate(self.signals)}
+
+        def walk(nodes, depth, inh):
+            for nd in nodes:
+                if nd.get("type") == "group":
+                    rows.append(Row("group", nd["gid"], depth, nd.get("color")))
+                    if not nd.get("collapsed"):
+                        walk(nd.get("children", []), depth + 1, nd.get("color") or inh)
+                else:
+                    si = sid2idx.get(nd.get("sid"))
+                    if si is not None:
+                        rows.append(Row("sig", si, depth, inh))
+        walk(self.group_tree, 0, None)
         return rows
+
+    # ---- 群組樹的低階操作 ----
+    def _dfs_leaves(self, nodes=None):
+        if nodes is None:
+            nodes = self.group_tree
+        out = []
+        for nd in nodes:
+            if nd.get("type") == "group":
+                out += self._dfs_leaves(nd.get("children", []))
+            else:
+                out.append(nd)
+        return out
+
+    def _detach_sid(self, sid):
+        def rec(nodes):
+            for k, nd in enumerate(nodes):
+                if nd.get("type") == "sig" and nd.get("sid") == sid:
+                    return nodes.pop(k)
+                if nd.get("type") == "group":
+                    r = rec(nd.get("children", []))
+                    if r is not None:
+                        return r
+            return None
+        return rec(self.group_tree)
+
+    def _find_group_node(self, gid, nodes=None):
+        if nodes is None:
+            nodes = self.group_tree
+        for nd in nodes:
+            if nd.get("type") == "group":
+                if nd["gid"] == gid:
+                    return nd
+                r = self._find_group_node(gid, nd.get("children", []))
+                if r is not None:
+                    return r
+        return None
+
+    def _find_leaf_loc(self, sid):
+        """回傳 (children_list, index) 指向該 sid 的葉節點，找不到回 None。"""
+        def rec(nodes):
+            for k, nd in enumerate(nodes):
+                if nd.get("type") == "sig" and nd.get("sid") == sid:
+                    return nodes, k
+                if nd.get("type") == "group":
+                    r = rec(nd.get("children", []))
+                    if r:
+                        return r
+            return None
+        return rec(self.group_tree)
+
+    def _locate(self, pred, nodes=None, parent_gid=None):
+        """回傳 (parent_gid, children_list, index)，parent_gid=None 表示頂層。"""
+        if nodes is None:
+            nodes = self.group_tree
+        for k, nd in enumerate(nodes):
+            if pred(nd):
+                return parent_gid, nodes, k
+            if nd.get("type") == "group":
+                r = self._locate(pred, nd.get("children", []), nd["gid"])
+                if r:
+                    return r
+        return None
+
+    def _container_children(self, gid):
+        if gid is None:
+            return self.group_tree
+        node = self._find_group_node(gid)
+        return node.get("children") if node is not None else None
+
+    def _is_self_or_descendant(self, gid, other):
+        """other 是否為 gid 自己或其子孫群組。"""
+        if gid == other:
+            return True
+        node = self._find_group_node(gid)
+        if node is None:
+            return False
+        return self._find_group_node(other, node.get("children", [])) is not None
+
+    def move_leaf_to(self, sid, container_gid, index):
+        """把訊號葉移到指定容器(None=頂層)的 children 指定位置。標記法自動修正索引位移。"""
+        cont = self._container_children(container_gid)
+        if cont is None:
+            return False
+        index = max(0, min(len(cont), index))
+        marker = {"type": "_marker"}
+        cont.insert(index, marker)
+        node = self._detach_sid(sid)
+        if node is None:
+            cont.remove(marker); self._after_tree_change(); return False
+        cont[cont.index(marker)] = node
+        self._after_tree_change()
+        return True
+
+    def move_group_to(self, gid, container_gid, index):
+        """把群組移到指定容器指定位置 (容器為群組則成巢狀)。防呆：不可移入自己或子孫。"""
+        if self._find_group_node(gid) is None:
+            return False
+        if container_gid is not None and self._is_self_or_descendant(gid, container_gid):
+            return False
+        cont = self._container_children(container_gid)
+        if cont is None:
+            return False
+        index = max(0, min(len(cont), index))
+        marker = {"type": "_marker"}
+        cont.insert(index, marker)
+        node = self._detach_group(gid)
+        if node is None:
+            cont.remove(marker); self._after_tree_change(); return False
+        cont[cont.index(marker)] = node
+        self._after_tree_change()
+        return True
+
+    def _detach_group(self, gid):
+        def rec(nodes):
+            for k, nd in enumerate(nodes):
+                if nd.get("type") == "group":
+                    if nd["gid"] == gid:
+                        return nodes.pop(k)
+                    r = rec(nd.get("children", []))
+                    if r is not None:
+                        return r
+            return None
+        return rec(self.group_tree)
+
+    def _top_index_of_sid(self, sid):
+        for k, nd in enumerate(self.group_tree):
+            if nd.get("type") == "sig" and nd.get("sid") == sid:
+                return k
+            if nd.get("type") == "group" and any(l.get("sid") == sid
+                                                 for l in self._dfs_leaves(nd.get("children", []))):
+                return k
+        return len(self.group_tree)
+
+    def _prune_empty_groups(self, nodes):
+        i = 0
+        while i < len(nodes):
+            nd = nodes[i]
+            if nd.get("type") == "group":
+                self._prune_empty_groups(nd.get("children", []))
+                if not nd.get("children"):
+                    del nodes[i]; continue
+            i += 1
+
+    def _resync_signals(self):
+        order = [nd["sid"] for nd in self._dfs_leaves()]
+        present = set(order)
+        for s in self.signals:                  # 保險：樹中遺漏的訊號補回頂層
+            if s["sid"] not in present:
+                self.group_tree.append({"type": "sig", "sid": s["sid"]})
+                order.append(s["sid"]); present.add(s["sid"])
+        by = {s["sid"]: s for s in self.signals}
+        self.signals = [by[sid] for sid in order if sid in by]
+
+    def _reindex_groups(self):
+        self.groups = {}
+        by = {s["sid"]: s for s in self.signals}
+
+        def rec(nodes, parent_gid):
+            for nd in nodes:
+                if nd.get("type") == "group":
+                    nd.setdefault("collapsed", False); nd.setdefault("color", None)
+                    nd.setdefault("name", nd["gid"])
+                    self.groups[nd["gid"]] = nd
+                    rec(nd.get("children", []), nd["gid"])
+                else:
+                    s = by.get(nd.get("sid"))
+                    if s is not None:
+                        s["group"] = parent_gid       # 直接父群組 gid 快取
+        rec(self.group_tree, None)
+
+    def _after_tree_change(self):
+        self._prune_empty_groups(self.group_tree)
+        self._resync_signals()
+        self._reindex_groups()
 
     def new_gid(self):
         self._gid_seq += 1
         gid = f"g{self._gid_seq}"
-        while gid in self.groups:
+        while self._find_group_node(gid) is not None:
             self._gid_seq += 1; gid = f"g{self._gid_seq}"
         return gid
 
     def group_signals(self, indices, name=None):
-        """建立新群組：把選取訊號移出原群組、聚攏相鄰、組成全新群組。
-        永遠新建 (不自動合併)；回傳 (gid, 新的連續索引清單)。"""
-        idxs = sorted({i for i in indices if 0 <= i < len(self.signals)})
-        if not idxs:
+        """把選取訊號組成一個全新群組 (插在第一個選取者所在的頂層位置)。回傳 gid。"""
+        sids = [self.signals[i]["sid"] for i in indices if 0 <= i < len(self.signals)]
+        order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
+        sids = sorted(set(sids), key=lambda s: order.get(s, 1 << 30))
+        if not sids:
             return None
-        block = [self.signals[i] for i in idxs]
-        for i in reversed(idxs):
-            del self.signals[i]
-        at = idxs[0]
-        # 避免新組插進某既有群組的連續區段中間 -> 若會分裂，移到該區段結尾
-        if 0 < at < len(self.signals):
-            gp = self.signals[at - 1].get("group")
-            if gp and self.signals[at].get("group") == gp:
-                while at < len(self.signals) and self.signals[at].get("group") == gp:
-                    at += 1
+        marker = {"type": "_marker"}
+        self.group_tree.insert(self._top_index_of_sid(sids[0]), marker)
+        children = [c for c in (self._detach_sid(s) for s in sids) if c]
         gid = self.new_gid()
-        for s in block:
-            s["group"] = gid
-        self.signals[at:at] = block
-        self.groups[gid] = {"name": name or f"群組{self._gid_seq}", "collapsed": False, "color": None}
-        self.prune_groups()                # 舊群組若被掏空則移除
-        return gid, list(range(at, at + len(block)))
+        node = {"type": "group", "gid": gid, "name": name or f"群組{self._gid_seq}",
+                "collapsed": False, "color": None, "children": children}
+        self.group_tree[self.group_tree.index(marker)] = node
+        self._after_tree_change()
+        return gid
 
     def merge_into_group(self, indices, target_gid):
-        """把選取訊號併入指定群組 (置於該群尾端、維持相鄰)。
-        已在該群者略過 (併入當前群組 = 無動作)。回傳 (gid, 新位置)。"""
-        if target_gid not in self.groups:
+        """把選取訊號移入指定群組 (附加到該群 children 尾端)。"""
+        tgt = self._find_group_node(target_gid)
+        if tgt is None:
             return None
-        sel = sorted({i for i in indices
-                      if 0 <= i < len(self.signals) and self.signals[i].get("group") != target_gid})
-        if not sel:
-            return target_gid, []
-        block = [self.signals[i] for i in sel]
-        for i in reversed(sel):
-            del self.signals[i]
-        for s in block:
-            s["group"] = target_gid
-        last = max((k for k, s in enumerate(self.signals) if s.get("group") == target_gid),
-                   default=len(self.signals) - 1)
-        at = last + 1
-        self.signals[at:at] = block
-        self.prune_groups()
-        return target_gid, list(range(at, at + len(block)))
+        sids = [self.signals[i]["sid"] for i in indices if 0 <= i < len(self.signals)]
+        order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
+        sids = sorted(set(sids), key=lambda s: order.get(s, 1 << 30))
+        for s in sids:
+            if self.signals[[x["sid"] for x in self.signals].index(s)].get("group") == target_gid:
+                continue
+            node = self._detach_sid(s)
+            if node:
+                tgt["children"].append(node)
+        self._after_tree_change()
+        return target_gid
 
     def merge_groups(self, src_gid, target_gid):
-        if src_gid == target_gid or src_gid not in self.groups or target_gid not in self.groups:
+        """把 src 群組整個移入 target 群組成為其子群組 (巢狀)。"""
+        if src_gid == target_gid:
             return None
-        idxs = [i for i, s in enumerate(self.signals) if s.get("group") == src_gid]
-        return self.merge_into_group(idxs, target_gid)
+        tgt = self._find_group_node(target_gid)
+        if tgt is None:
+            return None
+        # 不可把群組移進自己的子孫
+        if self._find_group_node(target_gid, [self._find_group_node(src_gid)] if
+                                 self._find_group_node(src_gid) else []):
+            return None
+        node = self._detach_group(src_gid)
+        if node is None:
+            self._after_tree_change(); return None
+        tgt["children"].append(node)
+        self._after_tree_change()
+        return target_gid
 
     def remove_from_group(self, indices):
-        """把選取的(有群組)訊號逐一移出其群組，置於原群尾端以維持相鄰；
-        移出後 color 設回預設(黑)。回傳被移出的數量。"""
-        idxs = sorted({i for i in indices
-                       if 0 <= i < len(self.signals) and self.signals[i].get("group")})
-        if not idxs:
+        """把選取的(有群組)訊號移到頂層 (移出所有群組)；移出後色彩回預設。回傳數量。"""
+        sids = [self.signals[i]["sid"] for i in indices
+                if 0 <= i < len(self.signals) and self.signals[i].get("group")]
+        order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
+        sids = sorted(set(sids), key=lambda s: order.get(s, 1 << 30))
+        if not sids:
             return 0
-        block = [self.signals[i] for i in idxs]
-        for i in reversed(idxs):
-            del self.signals[i]
-        moved = len(block)
-        for s in block:
-            fg = s.get("group")
-            s["group"] = None; s["color"] = None       # 移出後回預設色
-            last = max((k for k, t in enumerate(self.signals) if t.get("group") == fg),
-                       default=-1)
-            at = last + 1 if last != -1 else len(self.signals)
-            self.signals[at:at] = [s]
-        self.prune_groups()
+        marker = {"type": "_marker"}
+        self.group_tree.insert(self._top_index_of_sid(sids[0]), marker)
+        moved = 0
+        by = {s["sid"]: s for s in self.signals}
+        for s in sids:
+            node = self._detach_sid(s)
+            if node:
+                at = self.group_tree.index(marker)
+                self.group_tree.insert(at + 1, node)
+                if by.get(s):
+                    by[s]["color"] = None
+                moved += 1
+        self.group_tree.remove(marker)
+        self._after_tree_change()
         return moved
 
     def ungroup(self, gids):
+        """解散群組：把其 children 就地提升一層 (保留巢狀子群組與成員)。"""
         gids = set(gids)
-        for s in self.signals:
-            if s.get("group") in gids:
-                s["group"] = None
-        for g in gids:
-            self.groups.pop(g, None)
+
+        def rec(nodes):
+            i = 0
+            while i < len(nodes):
+                nd = nodes[i]
+                if nd.get("type") == "group":
+                    rec(nd.get("children", []))
+                    if nd["gid"] in gids:
+                        kids = nd.get("children", [])
+                        nodes[i:i + 1] = kids
+                        i += len(kids); continue
+                i += 1
+        rec(self.group_tree)
+        self._after_tree_change()
+
+    def delete_group(self, gid):
+        """刪除群組連同其整棵子樹的所有訊號。回傳刪除的訊號數。"""
+        node = self._detach_group(gid)
+        if node is None:
+            return 0
+        sids = {l["sid"] for l in self._dfs_leaves([node])}
+        self.signals = [s for s in self.signals if s["sid"] not in sids]
+        self._after_tree_change()
+        self.prune_annotations()
+        return len(sids)
 
     def prune_groups(self):
-        used = {s.get("group") for s in self.signals}
-        for g in list(self.groups):
-            if g not in used:
-                del self.groups[g]
+        self._prune_empty_groups(self.group_tree)
+        self._reindex_groups()
+
+    # ---- 標注 (錨點 node + 關係線 edge；獨立層，以 sid 錨定不受重排影響) ----
+    def new_nid(self):
+        import string
+        for ch in string.ascii_lowercase:
+            if ch not in self.nodes:
+                return ch
+        for a in string.ascii_lowercase:
+            for b in string.ascii_lowercase:
+                if (a + b) not in self.nodes:
+                    return a + b
+        return f"n{len(self.nodes)}"
+
+    def add_node(self, sid, period, edge):
+        nid = self.new_nid()
+        self.nodes[nid] = {"sid": sid, "period": int(period), "edge": edge}
+        return nid
+
+    def remove_node(self, nid):
+        self.nodes.pop(nid, None)
+        self.edges = [e for e in self.edges if e["frm"] != nid and e["to"] != nid]
+
+    def add_edge(self, frm, to, label="", style="double"):
+        if frm == to or frm not in self.nodes or to not in self.nodes:
+            return None
+        self.edges.append({"frm": frm, "to": to, "label": label, "style": style})
+        return self.edges[-1]
+
+    def prune_annotations(self):
+        valid_sids = {s.get("sid") for s in self.signals}
+        orphan_nodes = [n for n, nd in self.nodes.items() if nd.get("sid") not in valid_sids]
+        before_edges = len(self.edges)
+        for nid in orphan_nodes:
+            self.remove_node(nid)
+        self.edges = [e for e in self.edges
+                      if e["frm"] in self.nodes and e["to"] in self.nodes]
+        return len(orphan_nodes), before_edges - len(self.edges)   # (清除錨點數, 清除關係線數)
 
     def to_dict(self):
-        return {"version": "1.4", "n_periods": self.n_periods,
-                "signals": self.signals, "groups": self.groups}
+        return {"version": "2.0", "n_periods": self.n_periods,
+                "signals": self.signals, "group_tree": self.group_tree,
+                "nodes": self.nodes, "edges": self.edges}
+
+    def _migrate_flat_to_tree(self, gmeta):
+        """舊格式 (signal['group']=gid + groups dict) -> 單層群組樹。"""
+        self.group_tree = []; i = 0; n = len(self.signals)
+        while i < n:
+            g = self.signals[i].get("group")
+            meta = gmeta.get(g) if isinstance(gmeta, dict) else None
+            if g and isinstance(meta, dict):
+                node = {"type": "group", "gid": g, "name": meta.get("name", g),
+                        "collapsed": meta.get("collapsed", False),
+                        "color": meta.get("color"), "children": []}
+                while i < n and self.signals[i].get("group") == g:
+                    node["children"].append({"type": "sig", "sid": self.signals[i]["sid"]}); i += 1
+                self.group_tree.append(node)
+            else:
+                self.group_tree.append({"type": "sig", "sid": self.signals[i]["sid"]}); i += 1
 
     def load_dict(self, d):
         self.n_periods = int(d.get("n_periods", DEFAULT_PERIODS))
         self.signals = d.get("signals", [])
-        self.groups = d.get("groups", {})
-        self._gid_seq = len(self.groups)
+        self.nodes = d.get("nodes", {})
+        self.edges = d.get("edges", [])
+        self._sid_seq = 0
         for s in self.signals:
             s.setdefault("offset", 0.0)
             s.setdefault("color", None)
             s.setdefault("group", None)
+            if not s.get("sid"):
+                s["sid"] = self._new_sid()
+            else:
+                self._sid_seq = max(self._sid_seq, int(s["sid"]))
             cells = s.get("cells", [])
             while len(cells) < self.n_periods:
                 cells.append(self.new_cell("L"))
             del cells[self.n_periods:]
             s["cells"] = cells
-        self.prune_groups()
+        gt = d.get("group_tree")
+        if gt is not None:                      # 新格式：直接採用群組樹
+            self.group_tree = gt
+        else:                                   # 舊格式：扁平群組 -> 樹 (向後相容)
+            self._migrate_flat_to_tree(d.get("groups", {}))
+        # 還原 gid 序號 (避免新建群組撞名)
+        self._gid_seq = 0
+        for nd in self._all_group_nodes():
+            try:
+                self._gid_seq = max(self._gid_seq, int(str(nd["gid"]).lstrip("g") or 0))
+            except ValueError:
+                pass
+        self._after_tree_change()
+        return self.prune_annotations()        # (清除錨點數, 清除關係線數)
+
+    def _all_group_nodes(self, nodes=None):
+        if nodes is None:
+            nodes = self.group_tree
+        out = []
+        for nd in nodes:
+            if nd.get("type") == "group":
+                out.append(nd); out += self._all_group_nodes(nd.get("children", []))
+        return out
 
 
 # ============================================================================
@@ -444,14 +751,16 @@ class Engine:
         wave_cv.create_line(0, HH, grid_w, HH, fill=Style.GRID)
 
         sig_row = {}                       # signal index -> 可見列 (給 cell_sel 高亮)
-        for r, (kind, ref) in enumerate(rows):
+        for r, row in enumerate(rows):
+            kind, ref, depth, rgcol = row.kind, row.ref, row.depth, row.gcol
             row_top = HH + r * RH; row_bot = row_top + RH
-            if kind == "group":            # ---- 群組標頭列 ----
+            if kind == "group":            # ---- 群組標頭列 (依深度縮排) ----
                 meta = model.groups.get(ref, {})
-                gcol = meta.get("color")
+                gcol = rgcol
                 tri = "▸" if meta.get("collapsed") else "▾"
+                gx = 8 + depth * 16
                 name_cv.create_rectangle(0, row_top, NW, row_bot, fill=Style.FACE, outline=Style.FACE_DARK)
-                name_cv.create_text(8, (row_top + row_bot) // 2,
+                name_cv.create_text(gx, (row_top + row_bot) // 2,
                                     text=f"{tri} {meta.get('name', ref)}",
                                     anchor="w", font=Style.NAME_FONT, fill=(gcol or Style.TEXT))
                 wave_cv.create_rectangle(0, row_top, grid_w, row_bot, fill=Style.FACE, outline="")
@@ -462,10 +771,10 @@ class Engine:
             si = ref; sig = model.signals[si]; sig_row[si] = r    # ---- 訊號列 ----
             hi, mid, lo = geom.levels(row_top)
             ox = sig.get("offset", 0.0) * PW
-            gcol = model.groups.get(sig.get("group"), {}).get("color") if sig.get("group") else None
+            gcol = rgcol                       # 繼承自最近祖先群組 (layout 已算好)
             self._wcol = sig.get("color") or gcol or Style.WAVE   # 自訂色 > 群組色 > 預設
             namecol = sig.get("color") or gcol or Style.TEXT
-            indent = 20 if sig.get("group") else 8
+            indent = 8 + depth * 16            # 依巢狀深度縮排
             if si in sig_sel:
                 name_cv.create_rectangle(0, row_top, NW, row_bot, fill=Style.SEL, outline="")
             name_cv.create_rectangle(0, row_top, NW, row_bot,
@@ -481,6 +790,32 @@ class Engine:
                 el = self.elem(cells[p]["type"])
                 if el:
                     el.draw(self, wave_cv, geom, cells[p], pc, nc, p * PW + ox, hi, mid, lo)
+            if ox > 0:                          # 位移虛擬延伸 (純視覺，不入資料)
+                f = self.elem(cells[0]["type"])
+                if f is not None:
+                    if f.kind == "DATA":        # BUS/Unknown：左緣收口三角 (斜率=BUS 的 swing/tw)
+                        tw = geom.tw(); swing = lo - hi
+                        half_w = abs(mid - hi) * tw / swing   # 半擺幅水平寬 = tw/2
+                        base_x = ox - half_w    # 收口起點 (沿 BUS 斜率回推半擺幅)
+                        if base_x > 0:          # 三角前若有空間則補平行帶
+                            wave_cv.create_line(0, hi, base_x, hi, fill=self._wcol, width=2)
+                            wave_cv.create_line(0, lo, base_x, lo, fill=self._wcol, width=2)
+                            xh = xl = base_x; yh, yl = hi, lo
+                        else:                   # 回推超出左界 -> 在 x=0 沿斜率裁切
+                            t = (-base_x) / half_w  # 已在畫面外行進的比例
+                            xh = xl = 0.0
+                            yh = hi + (mid - hi) * t
+                            yl = lo + (mid - lo) * t
+                        wave_cv.create_line(xh, yh, ox, mid, fill=self._wcol, width=2)
+                        wave_cv.create_line(xl, yl, ox, mid, fill=self._wcol, width=2)
+                    elif f.kind == "CLK":       # 時脈：補靜止低準位
+                        wave_cv.create_line(0, lo, ox, lo, fill=self._wcol, width=2)
+                    else:                       # 單準位：補該準位
+                        y = f.entry_y(hi, mid, lo)
+                        if y is not None:
+                            wave_cv.create_line(0, y, ox, y, fill=self._wcol, width=2)
+                wave_cv.create_rectangle(grid_w + 1, row_top, grid_w + ox + 2, row_bot,
+                                         fill=Style.CANVAS_BG, outline="")   # 右端裁齊
 
         if cell_sel:
             s0, s1, p0, p1 = cell_sel
@@ -492,6 +827,80 @@ class Engine:
                                              fill=Style.MARQUEE_FILL, stipple="gray12",
                                              outline=Style.MARQUEE, dash=(3, 2), width=1)
 
+        # ---- 標注層：關係線 (在下) + 錨點 (在上) ----
+        sid2idx = {s.get("sid"): i for i, s in enumerate(model.signals)}
+        npos = self.node_positions(model, geom, sig_row, sid2idx)
+        for ed in model.edges:
+            a, b = npos.get(ed["frm"]), npos.get(ed["to"])
+            if a and b:
+                self.draw_edge(wave_cv, a, b, ed.get("label", ""), style=ed.get("style", "double"))
+        for nid, xy in npos.items():
+            self.draw_node(wave_cv, nid, xy)
+
+    # ---- 標注繪製 (Engine 與 PILCanvas 共用，匯出一致) ----
+    @staticmethod
+    def node_positions(model, geom, sig_row, sid2idx):
+        HH, RH, PW = geom.header_h, geom.row_h, geom.period_w
+        ex = {"start": 0.0, "mid": 0.5, "end": 1.0}
+        pos = {}
+        for nid, nd in model.nodes.items():
+            si = sid2idx.get(nd.get("sid"))
+            if si is None or si not in sig_row:
+                continue
+            ox = model.signals[si].get("offset", 0.0) * PW
+            x = (nd["period"] + ex.get(nd.get("edge", "start"), 0.0)) * PW + ox
+            y = HH + sig_row[si] * RH + RH / 2
+            pos[nid] = (x, y)
+        return pos
+
+    ANNOT = "#6A3FB5"
+
+    @staticmethod
+    def _scale_of(cv):
+        s = getattr(cv, "export_scale", 1)      # 注意：tkinter Canvas 本身有 scale() 方法，故改名避免撞名
+        return s if isinstance(s, (int, float)) else 1
+
+    def draw_node(self, cv, nid, xy, hot=False):
+        sc = self._scale_of(cv)
+        x, y = xy; r = 4 * sc
+        cv.create_oval(x - r, y - r, x + r, y + r,
+                       fill=(Style.MARQUEE if hot else "#FFFFFF"), outline=self.ANNOT, width=2)
+        cv.create_text(x, y - 10 * sc, text=nid, font=Style.LABEL_FONT, fill=self.ANNOT)
+
+    def draw_edge(self, cv, a, b, label="", hot=False, style="double"):
+        col = Style.MARQUEE if hot else self.ANNOT
+        cv.create_line(a[0], a[1], b[0], b[1], fill=col, width=2)
+        if style == "single":                   # 單箭頭：因果 frm -> to
+            self._arrow(cv, b, a, col)
+        elif style == "measure":                # 無箭頭：量測線 (兩端短橫標)
+            self._tick(cv, a, b, col); self._tick(cv, b, a, col)
+        else:                                   # double：雙箭頭 (預設)
+            self._arrow(cv, b, a, col); self._arrow(cv, a, b, col)
+        if label:
+            cv.create_text((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 8 * self._scale_of(cv),
+                           text=label, font=Style.BUS_FONT, fill=col)
+
+    @staticmethod
+    def _arrow(cv, tip, frm, col):
+        dx, dy = tip[0] - frm[0], tip[1] - frm[1]
+        L = math.hypot(dx, dy) or 1.0
+        ux, uy = dx / L, dy / L
+        sc = Engine._scale_of(cv)
+        sz, hw = 11 * sc, 5 * sc                # 箭頭長度 / 半寬 (隨匯出倍率放大)
+        bx, by = tip[0] - ux * sz, tip[1] - uy * sz
+        px, py = -uy, ux
+        cv.create_polygon([tip[0], tip[1],
+                           bx + px * hw, by + py * hw,
+                           bx - px * hw, by - py * hw], fill=col, outline=col)
+
+    @staticmethod
+    def _tick(cv, end, other, col):             # 量測線端點的垂直短橫
+        dx, dy = other[0] - end[0], other[1] - end[1]
+        L = math.hypot(dx, dy) or 1.0
+        px, py = -dy / L, dx / L; t = 6 * Engine._scale_of(cv)
+        cv.create_line(end[0] + px * t, end[1] + py * t,
+                       end[0] - px * t, end[1] - py * t, fill=col, width=2)
+
 
 # ============================================================================
 # PNG 匯出：Pillow 轉接層 (重用 Engine 的繪圖邏輯，不需 Ghostscript)
@@ -499,32 +908,38 @@ class Engine:
 #   PILCanvas 把 tkinter Canvas 的 create_* 介面對應到 Pillow ImageDraw，
 #   因此 Engine.draw 與各元件 draw() 可原封不動畫到影像上。
 # ============================================================================
-def _load_pil_fonts():
+def _load_pil_fonts(scale=1):
     from PIL import ImageFont
     reg_cands = ["msjh.ttc", "msyh.ttc", "mingliu.ttc", "NotoSansCJKtc-Regular.otf",
                  "PingFang.ttc", "tahoma.ttf", "arial.ttf", "DejaVuSans.ttf"]
     bold_cands = ["msjhbd.ttc", "msyhbd.ttc", "tahomabd.ttf", "arialbd.ttf",
                   "DejaVuSans-Bold.ttf"] + reg_cands
+    size = max(8, int(round(12 * scale)))
 
-    def pick(cands, size):
+    def pick(cands, sz):
         for c in cands:
             try:
-                return ImageFont.truetype(c, size)
+                return ImageFont.truetype(c, sz)
             except Exception:
                 pass
         return ImageFont.load_default()
-    return {"reg": pick(reg_cands, 12), "bold": pick(bold_cands, 12)}
+    return {"reg": pick(reg_cands, size), "bold": pick(bold_cands, size)}
 
 
 class PILCanvas:
-    """最小化的 tkinter Canvas 介面，實際畫到 Pillow ImageDraw。"""
-    def __init__(self, draw, fonts):
+    """最小化的 tkinter Canvas 介面，實際畫到 Pillow ImageDraw。
+    scale 用於高解析匯出：線寬與標注尺寸隨之放大 (座標已由縮放後的 Geometry 提供)。"""
+    def __init__(self, draw, fonts, scale=1):
         self.d = draw
         self.fonts = fonts
+        self.export_scale = scale
 
     @staticmethod
     def _c(v):
         return None if v in (None, "") else v
+
+    def _w(self, width):
+        return max(1, int(round(width * self.export_scale)))
 
     def _font(self, f):
         bold = isinstance(f, (tuple, list)) and "bold" in f
@@ -533,16 +948,20 @@ class PILCanvas:
     def create_line(self, *coords, fill=None, width=1, dash=None, **kw):
         f = self._c(fill)
         if f:
-            self.d.line(list(coords), fill=f, width=max(1, int(width)))
+            self.d.line(list(coords), fill=f, width=self._w(width))
 
     def create_rectangle(self, x0, y0, x1, y1, fill=None, outline=None,
                          width=1, dash=None, stipple=None, **kw):
         f = self._c(fill); o = self._c(outline)
         if f or o:
-            self.d.rectangle([x0, y0, x1, y1], fill=f, outline=o)
+            self.d.rectangle([x0, y0, x1, y1], fill=f, outline=o, width=self._w(width) if o else 1)
 
     def create_polygon(self, pts, fill=None, outline=None, **kw):
         self.d.polygon(list(pts), fill=self._c(fill), outline=self._c(outline))
+
+    def create_oval(self, x0, y0, x1, y1, fill=None, outline=None, width=1, **kw):
+        self.d.ellipse([x0, y0, x1, y1], fill=self._c(fill),
+                       outline=self._c(outline), width=self._w(width) if self._c(outline) else 1)
 
     def create_text(self, x, y, text="", font=None, fill=None, anchor="center", **kw):
         f = self._c(fill) or "#000000"
@@ -551,6 +970,90 @@ class PILCanvas:
             self.d.text((x, y), str(text), fill=f, font=self._font(font), anchor=anc)
         except TypeError:                       # 舊版 Pillow 無 anchor 參數
             self.d.text((x, y), str(text), fill=f, font=self._font(font))
+
+    def configure(self, **kw):
+        pass
+
+    def delete(self, *a):
+        pass
+
+
+class SVGCanvas:
+    """把 tkinter Canvas 介面對應到 SVG 元素 (向量、無限解析度)。
+    多個實例可共用同一個 elements 串列，並用 xoff 水平位移 (名稱欄 / 波形區合成單檔)。"""
+    CJK = "'Microsoft JhengHei','PingFang TC','Noto Sans CJK TC','Heiti TC',sans-serif"
+
+    def __init__(self, elements, xoff=0):
+        self.e = elements
+        self.xoff = xoff
+
+    def _x(self, x):
+        return x + self.xoff
+
+    @staticmethod
+    def _c(v):
+        return None if v in (None, "") else v
+
+    @staticmethod
+    def _esc(t):
+        return (str(t).replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace('"', "&quot;"))
+
+    def _pts(self, coords):
+        return " ".join(f"{self._x(coords[i]):.1f},{coords[i+1]:.1f}"
+                        for i in range(0, len(coords) - 1, 2))
+
+    def create_line(self, *coords, fill=None, width=1, dash=None, **kw):
+        f = self._c(fill)
+        if not f:
+            return
+        da = f' stroke-dasharray="{dash[0]},{dash[1]}"' if dash else ""
+        self.e.append(f'<polyline points="{self._pts(coords)}" fill="none" '
+                      f'stroke="{f}" stroke-width="{width}"{da}/>')
+
+    def create_rectangle(self, x0, y0, x1, y1, fill=None, outline=None,
+                         width=1, dash=None, stipple=None, **kw):
+        f = self._c(fill); o = self._c(outline)
+        if not (f or o):
+            return
+        X0, X1 = self._x(min(x0, x1)), self._x(max(x0, x1))
+        Y0, Y1 = min(y0, y1), max(y0, y1)
+        a = f'fill="{f}"' if f else 'fill="none"'
+        if o:
+            a += f' stroke="{o}" stroke-width="{width}"'
+        self.e.append(f'<rect x="{X0:.1f}" y="{Y0:.1f}" width="{X1-X0:.1f}" '
+                      f'height="{Y1-Y0:.1f}" {a}/>')
+
+    def create_polygon(self, pts, fill=None, outline=None, **kw):
+        f = self._c(fill); o = self._c(outline)
+        a = f'fill="{f}"' if f else 'fill="none"'
+        if o:
+            a += f' stroke="{o}"'
+        self.e.append(f'<polygon points="{self._pts(list(pts))}" {a}/>')
+
+    def create_oval(self, x0, y0, x1, y1, fill=None, outline=None, width=1, **kw):
+        cx = (self._x(x0) + self._x(x1)) / 2; cy = (y0 + y1) / 2
+        rx = abs(x1 - x0) / 2; ry = abs(y1 - y0) / 2
+        f = self._c(fill); o = self._c(outline)
+        a = f'fill="{f}"' if f else 'fill="none"'
+        if o:
+            a += f' stroke="{o}" stroke-width="{width}"'
+        self.e.append(f'<ellipse cx="{cx:.1f}" cy="{cy:.1f}" rx="{rx:.1f}" ry="{ry:.1f}" {a}/>')
+
+    def create_text(self, x, y, text="", font=None, fill=None, anchor="center", **kw):
+        f = self._c(fill) or "#000000"
+        size, bold = 12, False
+        if isinstance(font, (tuple, list)):
+            for v in font:
+                if isinstance(v, int):
+                    size = int(round(abs(v) * 1.33))
+                elif v == "bold":
+                    bold = True
+        ta = {"center": "middle", "w": "start", "e": "end"}.get(anchor, "middle")
+        wt = ' font-weight="bold"' if bold else ""
+        self.e.append(f'<text x="{self._x(x):.1f}" y="{y:.1f}" font-size="{size}" '
+                      f'font-family="{self.CJK}" text-anchor="{ta}" '
+                      f'dominant-baseline="middle" fill="{f}"{wt}>{self._esc(text)}</text>')
 
     def configure(self, **kw):
         pass
@@ -614,7 +1117,7 @@ class TemplateLibrary:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RetroWave - 數位波型繪製工具  v1.7")
+        self.title("RetroWave - 數位波型繪製工具  v1.17")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.model = Model(); self.geom = Geometry(); self.engine = Engine()
@@ -626,6 +1129,10 @@ class App(tk.Tk):
         self._press = None; self._press_xy = (0, 0); self._moved = False
         self._marquee = None; self._selecting = False
         self._drag_value = None; self._hover = None
+        self._hover_node = None; self._hover_edge = None
+        self._connecting = False; self._connect_from = None; self._connect_xy = None
+        self._name_press = None; self._name_moved = False; self._dragging = False
+        self._drag_kind = None; self._drag_ref = None; self._drop = None; self._drop_target = None
         self.lib = TemplateLibrary()
         self._build_menubar(); self._build_toolbar(); self._build_main()
         self._build_statusbar(); self._bind_keys()
@@ -643,6 +1150,7 @@ class App(tk.Tk):
         fm.add_command(label="匯入範本… (Import Template)", command=self._import_template)
         fm.add_separator()
         fm.add_command(label="匯出圖片… (Export)\tCtrl+E", command=self.do_export)
+        fm.add_command(label="匯出 WaveDrom JSON…", command=self.do_export_wavedrom)
         fm.add_separator()
         fm.add_command(label="離開 (Exit)", command=self.destroy)
         fmb.configure(menu=fm); fmb.pack(side=tk.LEFT)
@@ -739,27 +1247,30 @@ class App(tk.Tk):
             return
         if not tsignals:
             messagebox.showwarning("插入範本", "此範本沒有任何訊號。"); return
-        sigs = self.model.signals; npd = self.model.n_periods
-        at = len(sigs)                          # 範本插在末端 (整塊、可預期)
+        npd = self.model.n_periods
         gid = self.model.new_gid()
         gname = self._unique_name(entry["name"], {me.get("name") for me in self.model.groups.values()})
-        names = {s["name"] for s in sigs}
-        block = []
+        names = {s["name"] for s in self.model.signals}
+        children = []
         for ts in tsignals:
             ns = {"name": ts.get("name", "SIG"), "offset": float(ts.get("offset", 0.0)),
-                  "color": ts.get("color"), "group": gid,
+                  "color": ts.get("color"), "group": gid, "sid": self.model._new_sid(),
                   "cells": [{"type": c.get("type", "L"), "text": c.get("text", "")}
                             for c in ts.get("cells", [])]}
             ns["name"] = self._unique_name(ns["name"], names); names.add(ns["name"])
             while len(ns["cells"]) < npd:
                 ns["cells"].append(self.model.new_cell("L"))
             del ns["cells"][npd:]
-            block.append(ns)
-        sigs[at:at] = block
-        self.model.groups[gid] = {"name": gname, "collapsed": False, "color": None}
-        self.sig_sel = set(range(at, at + len(block))); self.selected = at; self._sig_anchor = at
+            self.model.signals.append(ns)
+            children.append({"type": "sig", "sid": ns["sid"]})
+        self.model.group_tree.append({"type": "group", "gid": gid, "name": gname,
+                                      "collapsed": False, "color": None, "children": children})
+        self.model._after_tree_change()
+        sids = {c["sid"] for c in children}
+        newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
+        self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
         self.render()
-        self.status.configure(text=f" 已插入範本「{gname}」（{len(block)} 條，已成群組）")
+        self.status.configure(text=f" 已插入範本「{gname}」（{len(children)} 條，已成群組）")
 
     def _build_toolbar(self):
         tb = tk.Frame(self, bg=Style.FACE, bd=1, relief=tk.RAISED); tb.pack(side=tk.TOP, fill=tk.X)
@@ -835,9 +1346,11 @@ class App(tk.Tk):
         self.wave_cv.bind("<Button-1>", self.on_press)
         self.wave_cv.bind("<B1-Motion>", self.on_motion)
         self.wave_cv.bind("<ButtonRelease-1>", self.on_release)
-        self.wave_cv.bind("<Button-3>", self.on_erase)
+        self.wave_cv.bind("<Button-3>", self.on_wave_menu)
         self.wave_cv.bind("<Motion>", self.on_hover)
-        self.name_cv.bind("<Button-1>", self.on_name_click)
+        self.name_cv.bind("<Button-1>", self.on_name_press)
+        self.name_cv.bind("<B1-Motion>", self.on_name_drag)
+        self.name_cv.bind("<ButtonRelease-1>", self.on_name_release)
         self.name_cv.bind("<Double-Button-1>", self.on_name_rename)
         self.name_cv.bind("<Button-3>", self.on_name_menu)
         for cv in (self.wave_cv, self.name_cv):
@@ -860,6 +1373,7 @@ class App(tk.Tk):
         self.bind("<Control-c>", lambda e: self.do_copy())
         self.bind("<Control-v>", lambda e: self.do_paste())
         self.bind("<Escape>", lambda e: self._clear_cell_sel())
+        self.bind("<Delete>", lambda e: self._del_hovered_annot())
 
         def keyed(fn):
             def handler(e):
@@ -927,7 +1441,63 @@ class App(tk.Tk):
     def render(self):
         self.name_cv.configure(width=self.geom.name_w)
         self.engine.draw(self.name_cv, self.wave_cv, self.model, self.sig_sel, self.geom, self.cell_sel)
+        self._draw_annot_overlay()
+        self._draw_drag_overlay()
         self._update_status()
+
+    # ---- 標注：座標/命中/覆蓋層 ----
+    def _node_screen_positions(self):
+        rows = self.model.layout()
+        sig_row = {row.ref: r for r, row in enumerate(rows) if row.kind == "sig"}
+        sid2idx = {s.get("sid"): i for i, s in enumerate(self.model.signals)}
+        return self.engine.node_positions(self.model, self.geom, sig_row, sid2idx)
+
+    def _node_at_xy(self, cx, cy, rad=8):
+        best, bd = None, rad
+        for nid, (x, y) in self._node_screen_positions().items():
+            d = math.hypot(cx - x, cy - y)
+            if d <= bd:
+                bd = d; best = nid
+        return best
+
+    @staticmethod
+    def _pt_seg_dist(px, py, ax, ay, bx, by):
+        dx, dy = bx - ax, by - ay
+        if dx == 0 and dy == 0:
+            return math.hypot(px - ax, py - ay)
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+        return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+    def _edge_at_xy(self, cx, cy, tol=6):
+        pos = self._node_screen_positions()
+        for i, ed in enumerate(self.model.edges):
+            a, b = pos.get(ed["frm"]), pos.get(ed["to"])
+            if a and b and self._pt_seg_dist(cx, cy, a[0], a[1], b[0], b[1]) <= tol:
+                return i
+        return None
+
+    def _draw_annot_overlay(self):
+        pos = self._node_screen_positions()
+        if self._connecting:
+            PW = self.geom.period_w
+            max_off = max((s.get("offset", 0.0) for s in self.model.signals), default=0.0)
+            w = self.model.n_periods * PW + max_off * PW + 4
+            h = self.geom.header_h + len(self.model.layout()) * self.geom.row_h
+            self.wave_cv.create_rectangle(0, 0, w, h, fill="#C2C2C2", stipple="gray50", outline="")
+            for nid, xy in pos.items():
+                self.engine.draw_node(self.wave_cv, nid, xy, hot=(nid == self._hover_node))
+            if self._connect_from in pos and self._connect_xy:
+                x0, y0 = pos[self._connect_from]; x1, y1 = self._connect_xy
+                self.wave_cv.create_line(x0, y0, x1, y1, fill=Style.MARQUEE, width=2, dash=(5, 3))
+                self.engine.draw_node(self.wave_cv, self._connect_from, pos[self._connect_from], hot=True)
+        elif self._hover_node and self._hover_node in pos:
+            self.engine.draw_node(self.wave_cv, self._hover_node, pos[self._hover_node], hot=True)
+        elif self._hover_edge is not None and 0 <= self._hover_edge < len(self.model.edges):
+            ed = self.model.edges[self._hover_edge]
+            a, b = pos.get(ed["frm"]), pos.get(ed["to"])
+            if a and b:
+                self.engine.draw_edge(self.wave_cv, a, b, ed.get("label", ""),
+                                      hot=True, style=ed.get("style", "double"))
 
     # ---- 座標 <-> 格子 (透過 layout 把可見列翻成訊號索引) ----
     def _resolve_row(self, cy):
@@ -955,7 +1525,7 @@ class App(tk.Tk):
             r = max(0, min(len(rows) - 1, r))
         elif cy < self.geom.header_h or not (0 <= r < len(rows)):
             return None
-        kind, ref = rows[r]
+        kind, ref = rows[r].kind, rows[r].ref
         if kind == "sig":
             si = ref
         elif clamp:
@@ -977,15 +1547,27 @@ class App(tk.Tk):
 
     # ---- 滑鼠 ----
     def on_hover(self, e):
-        self._hover = self._cell_from_xy(*self._ev_xy(e))
+        cx, cy = self._ev_xy(e)
+        self._hover = self._cell_from_xy(cx, cy)
+        hv = self._node_at_xy(cx, cy)
+        he = self._edge_at_xy(cx, cy) if hv is None else None
+        if hv != self._hover_node or he != self._hover_edge:
+            self._hover_node = hv; self._hover_edge = he
+            self.render()
 
     def on_press(self, e):
         self.wave_cv.focus_set()
         cx, cy = self._ev_xy(e)
         self._press_xy = (cx, cy)
+        ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
+        nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
+        if nid:                                   # 從錨點拉線 (進入冷凍)
+            self._connecting = True; self._connect_from = nid
+            self._connect_xy = (cx, cy); self._press = None
+            self._selecting = False; self._moved = False
+            self.render(); return
         self._press = self._cell_from_xy(cx, cy)
         self._moved = False
-        ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
         self._selecting = ctrl or shift          # Shift/Ctrl 拖曳皆為純框選
         if self._press:
             self.selected = self._press[0]
@@ -1004,6 +1586,11 @@ class App(tk.Tk):
 
     def on_motion(self, e):
         cx, cy = self._ev_xy(e)
+        if self._connecting:
+            self._connect_xy = (cx, cy)
+            hv = self._node_at_xy(cx, cy)
+            self._hover_node = hv if hv != self._connect_from else None
+            self.render(); return
         if self._selecting:
             self._moved = True
             self._draw_marquee(self._press_xy, (cx, cy))
@@ -1019,6 +1606,16 @@ class App(tk.Tk):
 
     def on_release(self, e):
         cx, cy = self._ev_xy(e)
+        if self._connecting:
+            target = self._node_at_xy(cx, cy)
+            frm = self._connect_from
+            self._connecting = False; self._connect_from = None; self._connect_xy = None
+            self._hover_node = None
+            if target and target != frm:
+                label = simpledialog.askstring("關係線", "標籤 (可留空，例如 t_su):", parent=self) or ""
+                self.model.add_edge(frm, target, label)
+                self.status.configure(text=f" 已建立關係線 {frm} → {target}")
+            self.render(); return
         if self._selecting:
             a = self._cell_from_xy(*self._press_xy, clamp=True)
             b = self._cell_from_xy(cx, cy, clamp=True)
@@ -1034,10 +1631,87 @@ class App(tk.Tk):
                 self._click_cell(*self._press)
             self.render()
 
-    def on_erase(self, e):
-        cur = self._cell_from_xy(*self._ev_xy(e))
-        if cur:
-            self.model.set_cell(cur[0], cur[1], "L"); self.render()
+    def on_wave_menu(self, e):
+        cx, cy = self._ev_xy(e)
+        m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
+        nid = self._node_at_xy(cx, cy)
+        if nid:
+            m.add_command(label=f"刪除錨點 {nid}", command=lambda: self._del_node(nid))
+        else:
+            ei = self._edge_at_xy(cx, cy)
+            if ei is not None:
+                m.add_command(label="編輯標籤…", command=lambda: self._edit_edge(ei))
+                sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
+                cur = self.model.edges[ei].get("style", "double")
+                for sty, lab in (("double", "雙箭頭（量測）"),
+                                 ("single", "單箭頭（因果）"),
+                                 ("measure", "無箭頭（量測線）")):
+                    mark = "● " if sty == cur else "○ "
+                    sub.add_command(label=mark + lab, command=lambda s=sty: self._set_edge_style(ei, s))
+                m.add_cascade(label="箭頭樣式", menu=sub)
+                m.add_command(label="刪除關係線", command=lambda: self._del_edge(ei))
+            else:
+                c = self._cell_from_xy(cx, cy)
+                if not c:
+                    return
+                m.add_command(label="在此建立錨點", command=lambda: self._add_node_at(cx, cy))
+                m.add_separator()
+                m.add_command(label="清成 L",
+                              command=lambda cc=c: (self.model.set_cell(cc[0], cc[1], "L"), self.render()))
+        try:
+            m.tk_popup(e.x_root, e.y_root)
+        finally:
+            m.grab_release()
+
+    def _cell_edge_from_xy(self, cx, cy):
+        c = self._cell_from_xy(cx, cy)
+        if not c:
+            return None
+        si, p = c
+        ox = self.model.signals[si].get("offset", 0.0) * self.geom.period_w
+        frac = ((cx - ox) / self.geom.period_w) - p
+        edge = "start" if frac < 0.34 else ("end" if frac > 0.66 else "mid")
+        return (si, p, edge)
+
+    def _add_node_at(self, cx, cy):
+        ce = self._cell_edge_from_xy(cx, cy)
+        if not ce:
+            return
+        si, p, edge = ce
+        nid = self.model.add_node(self.model.signals[si].get("sid"), p, edge)
+        self.render(); self.status.configure(text=f" 已建立錨點 {nid}（拖曳錨點可拉關係線；Del 刪除）")
+
+    def _del_node(self, nid):
+        self.model.remove_node(nid)
+        if self._hover_node == nid:
+            self._hover_node = None
+        self.render(); self.status.configure(text=f" 已刪除錨點 {nid}")
+
+    def _edit_edge(self, i):
+        if 0 <= i < len(self.model.edges):
+            cur = self.model.edges[i].get("label", "")
+            new = simpledialog.askstring("關係線標籤", "標籤:", initialvalue=cur, parent=self)
+            if new is not None:
+                self.model.edges[i]["label"] = new; self.render()
+
+    def _del_edge(self, i):
+        if 0 <= i < len(self.model.edges):
+            del self.model.edges[i]; self._hover_edge = None
+            self.render(); self.status.configure(text=" 已刪除關係線")
+
+    def _set_edge_style(self, i, style):
+        if 0 <= i < len(self.model.edges):
+            self.model.edges[i]["style"] = style
+            self.render()
+            self.status.configure(text=f" 關係線樣式：{ {'double':'雙箭頭','single':'單箭頭因果','measure':'無箭頭量測'}[style] }")
+
+    def _del_hovered_annot(self):
+        if self._is_typing():
+            return
+        if self._hover_node:
+            self._del_node(self._hover_node)
+        elif self._hover_edge is not None:
+            self._del_edge(self._hover_edge)
 
     def _paint_cell(self, s, p, t, drag_value=None):
         cells = self.model.signals[s]["cells"]
@@ -1101,27 +1775,28 @@ class App(tk.Tk):
         if self._clip_kind == "group" and self.clip_group:
             self._paste_group(); return
         if self._clip_kind == "signals" and self.clip_signals:
-            sigs = self.model.signals
-            at = self.selected + 1
-            if 0 <= self.selected < len(sigs):       # 若選取列在群組中，插到該群尾端(不分裂群組)
-                g = sigs[self.selected].get("group")
-                if g:
-                    j = self.selected
-                    while j < len(sigs) and sigs[j].get("group") == g:
-                        j += 1
-                    at = j
-            names = {s["name"] for s in sigs}
+            names = {s["name"] for s in self.model.signals}
+            # 插入點：選取訊號所在頂層位置之後
+            at_top = len(self.model.group_tree)
+            if 0 <= self.selected < len(self.model.signals):
+                at_top = self.model._top_index_of_sid(self.model.signals[self.selected]["sid"]) + 1
+            new_sids = []
             for k, sig in enumerate(self.clip_signals):
                 ns = self._copy_signal(sig)
                 ns["name"] = self._unique_name(ns["name"], names); names.add(ns["name"])
-                ns["group"] = None                   # 複本預設不分組(群組級複製留待 Phase C)
+                ns["group"] = None                   # 複本預設不分組
+                ns["sid"] = self.model._new_sid()    # 複本需有獨立 sid (錨點才不會錯位)
                 cells = ns["cells"]
                 while len(cells) < self.model.n_periods:
                     cells.append(self.model.new_cell("L"))
                 del cells[self.model.n_periods:]
-                sigs.insert(at + k, ns)
-            self.selected = at
-            self.sig_sel = set(range(at, at + len(self.clip_signals))); self._sig_anchor = at
+                self.model.signals.append(ns)
+                self.model.group_tree.insert(at_top + k, {"type": "sig", "sid": ns["sid"]})
+                new_sids.append(ns["sid"])
+            self.model._after_tree_change()
+            newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in set(new_sids)]
+            self.selected = newidx[0]
+            self.sig_sel = set(newidx); self._sig_anchor = newidx[0]
             self._refresh_offset_field(); self.render()
             self.status.configure(text=f" 已貼上 {len(self.clip_signals)} 條訊號（複本未分組）")
         elif self._clip_kind == "cells" and self.clip:
@@ -1166,8 +1841,53 @@ class App(tk.Tk):
         if self._marquee:
             self.wave_cv.delete(self._marquee); self._marquee = None
 
-    # ---- 名稱欄 (Ctrl/Shift 多選訊號) ----
-    def on_name_click(self, e):
+    # ---- 名稱欄 (點選 / 拖曳排序) ----
+    def on_name_press(self, e):
+        self.name_cv.focus_set()
+        cy = self.name_cv.canvasy(e.y)
+        self._name_press = (self._resolve_row(cy), e.x, cy)
+        self._name_moved = False; self._dragging = False
+        self._drag_kind = None; self._drag_ref = None
+        self._drop = None; self._drop_target = None
+
+    def on_name_drag(self, e):
+        if self._name_press is None:
+            return
+        item, _px, py = self._name_press
+        cy = self.name_cv.canvasy(e.y)
+        if not self._dragging:
+            if item is None or abs(cy - py) < self.geom.row_h / 2:   # 門檻=列高一半
+                return
+            self._dragging = True
+            self._drag_kind = "group" if item[0] == "group" else "sig"
+            self._drag_ref = item[1]
+        self._compute_drop(cy)
+        self.render()
+
+    def on_name_release(self, e):
+        if self._dragging:
+            tgt = self._drop_target
+            if tgt is not None and tgt.get("valid"):
+                if self._drag_kind == "sig":
+                    sid = self.model.signals[self._drag_ref]["sid"]
+                    self.model.move_leaf_to(sid, tgt["container"], tgt["index"])
+                    self.sig_sel = {i for i, s in enumerate(self.model.signals) if s["sid"] == sid}
+                    self.selected = next(iter(self.sig_sel), self.selected)
+                    self._sig_anchor = self.selected
+                    self.status.configure(text=" 已移動訊號" +
+                                          ("（併入群組）" if tgt["container"] else "（移到頂層）"))
+                else:
+                    self.model.move_group_to(self._drag_ref, tgt["container"], tgt["index"])
+                    self.status.configure(text=" 已移動群組" +
+                                          ("（巢狀為子群組）" if tgt["container"] else "（頂層）"))
+            self._dragging = False; self._drop = None; self._drop_target = None
+            self._name_press = None
+            self._refresh_offset_field(); self.render()
+        else:
+            self._name_press = None
+            self._name_click(e)
+
+    def _name_click(self, e):
         item = self._resolve_row(self.name_cv.canvasy(e.y))
         if item is None:
             return
@@ -1191,6 +1911,98 @@ class App(tk.Tk):
         self._copy_ctx = "signals"
         self._refresh_offset_field(); self.render()
 
+    # ---- 拖曳落點解析 (容器 + 插入索引)、容器高亮、插入線 ----
+    def _group_visible_span(self, rows, gid):
+        r0 = next((r for r, row in enumerate(rows)
+                   if row.kind == "group" and row.ref == gid), None)
+        if r0 is None:
+            return None
+        base = rows[r0].depth; r1 = r0
+        rr = r0 + 1
+        while rr < len(rows) and rows[rr].depth > base:
+            r1 = rr; rr += 1
+        return r0, r1
+
+    def _child_first_visible_row(self, rows, container_gid, index):
+        """容器 children 第 index 個子節點的首個可見列 (供插入線定位)；index==len 回末端。"""
+        children = self.model._container_children(container_gid) or []
+        sid2idx = {s["sid"]: i for i, s in enumerate(self.model.signals)}
+        if index < len(children):
+            nd = children[index]
+            if nd.get("type") == "group":
+                return next((r for r, row in enumerate(rows)
+                             if row.kind == "group" and row.ref == nd["gid"]), None)
+            si = sid2idx.get(nd.get("sid"))
+            return next((r for r, row in enumerate(rows)
+                         if row.kind == "sig" and row.ref == si), None)
+        # index==len：落在容器尾端
+        if container_gid is None:
+            return len(rows)
+        span = self._group_visible_span(rows, container_gid)
+        return (span[1] + 1) if span else None
+
+    def _compute_drop(self, cy):
+        HH, RH = self.geom.header_h, self.geom.row_h
+        rows = self.model.layout()
+        if not rows:
+            self._drop = None; self._drop_target = None; return
+        rf = (cy - HH) / RH
+        r = max(0, min(len(rows) - 1, int(rf)))
+        lower = (rf - int(rf)) >= 0.5
+        row = rows[r]
+        container = None; index = 0; hl = None
+
+        if row.kind == "group":
+            gid = row.ref
+            if not lower:                       # 上半：插在此群組之前 (同層、群組的父容器)
+                pg, _lst, idx = self.model._locate(
+                    lambda nd: nd.get("type") == "group" and nd.get("gid") == gid)
+                container, index, hl = pg, idx, pg
+            else:                               # 下半：放進此群組最前
+                container, index, hl = gid, 0, gid
+        else:                                   # 訊號列：容器=其直接父，索引=同層位置±半列
+            sid = self.model.signals[row.ref]["sid"]
+            loc = self.model._locate(lambda nd: nd.get("type") == "sig" and nd.get("sid") == sid)
+            pg, _lst, idx = loc
+            container, index, hl = pg, idx + (1 if lower else 0), pg
+
+        valid = True
+        if self._drag_kind == "group":          # 防呆：不可移入自己或子孫
+            if container is not None and self.model._is_self_or_descendant(self._drag_ref, container):
+                valid = False
+
+        # 插入線 y：對齊容器內 index 的首個可見列
+        vr = self._child_first_visible_row(rows, container, index)
+        if vr is None:
+            vr = r + (1 if lower else 0)
+        self._drop_target = {"container": container, "index": index, "valid": valid}
+        self._drop = {"y": HH + vr * RH, "valid": valid, "hl": hl}
+
+    def _draw_drag_overlay(self):
+        if not self._dragging or not self._drop:
+            return
+        rows = self.model.layout()
+        HH, RH = self.geom.header_h, self.geom.row_h
+        H = HH + len(rows) * RH
+        NW = self.geom.name_w
+        max_off = max((s.get("offset", 0.0) for s in self.model.signals), default=0.0)
+        WW = self.model.n_periods * self.geom.period_w + max_off * self.geom.period_w + 4
+        self.name_cv.create_rectangle(0, 0, NW, H, fill="#C2C2C2", stipple="gray50", outline="")
+        self.wave_cv.create_rectangle(0, 0, WW, H, fill="#C2C2C2", stipple="gray50", outline="")
+        # 點亮「將落入的容器」：框出該群組整塊
+        hl = self._drop.get("hl")
+        if hl is not None and self._drop.get("valid"):
+            span = self._group_visible_span(rows, hl)
+            if span:
+                y0 = HH + span[0] * RH; y1 = HH + (span[1] + 1) * RH
+                for cv, w in ((self.name_cv, NW), (self.wave_cv, WW)):
+                    cv.create_rectangle(1, y0 + 1, w - 1, y1 - 1,
+                                        outline=Style.MARQUEE, width=2)
+        # 插入線
+        y = self._drop["y"]; col = Style.MARQUEE if self._drop["valid"] else "#CC2222"
+        self.name_cv.create_line(0, y, NW, y, fill=col, width=3)
+        self.wave_cv.create_line(0, y, WW, y, fill=col, width=3)
+
     def on_name_menu(self, e):
         item = self._resolve_row(self.name_cv.canvasy(e.y))
         if item is None:
@@ -1201,6 +2013,7 @@ class App(tk.Tk):
             m.add_command(label=("展開" if meta.get("collapsed") else "折疊"),
                           command=lambda: self._toggle_group(gid))
             m.add_command(label="群組調色…", command=lambda: self._color_group(gid))
+            m.add_command(label="設定群組位移…", command=lambda: self._offset_group(gid))
             m.add_command(label="重新命名群組…", command=lambda: self._rename_group(gid))
             others = [g for g in self.model.groups if g != gid]
             if others:
@@ -1214,7 +2027,8 @@ class App(tk.Tk):
             if self.clip_group:
                 m.add_command(label="貼上群組", command=self._paste_group)
             m.add_separator()
-            m.add_command(label="解散群組", command=lambda: self._dissolve_group(gid))
+            m.add_command(label="解散群組（保留成員）", command=lambda: self._dissolve_group(gid))
+            m.add_command(label="刪除群組（含成員）", command=lambda: self._delete_group(gid))
             try:
                 m.tk_popup(e.x_root, e.y_root)
             finally:
@@ -1277,9 +2091,10 @@ class App(tk.Tk):
         name = simpledialog.askstring("建立新群組", "群組名稱:", initialvalue="群組", parent=self)
         if name is None:
             return
-        res = self.model.group_signals(idxs, name)
-        if res:
-            gid, newidx = res
+        sids = {self.model.signals[i]["sid"] for i in idxs}
+        gid = self.model.group_signals(idxs, name)
+        if gid:
+            newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
             self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
             self.render()
             nm = self.model.groups.get(gid, {}).get("name", gid)
@@ -1288,24 +2103,24 @@ class App(tk.Tk):
     def _merge_selected_into(self, target_gid):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
                       if 0 <= i < len(self.model.signals))
+        sids = {self.model.signals[i]["sid"] for i in idxs}
         res = self.model.merge_into_group(idxs, target_gid)
         if not res:
             return
-        gid, newpos = res
-        nm = self.model.groups.get(gid, {}).get("name", gid)
-        if newpos:
-            self.sig_sel = set(newpos); self.selected = newpos[0]; self._sig_anchor = newpos[0]
-            self.render()
-            self.status.configure(text=f" 已併入群組「{nm}」（{len(newpos)} 條）")
-        else:
-            self.status.configure(text=f" 選取訊號已在群組「{nm}」中，無變更")
+        nm = self.model.groups.get(target_gid, {}).get("name", target_gid)
+        newpos = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
+        self.sig_sel = set(newpos); self.selected = newpos[0]; self._sig_anchor = newpos[0]
+        self.render()
+        self.status.configure(text=f" 已併入群組「{nm}」（{len(newpos)} 條）")
 
     def _merge_group_into(self, src_gid, target_gid):
         res = self.model.merge_groups(src_gid, target_gid)
         if res:
             self.render()
             self.status.configure(
-                text=f" 已將群組合併至「{self.model.groups.get(target_gid, {}).get('name', target_gid)}」")
+                text=f" 已將群組巢狀至「{self.model.groups.get(target_gid, {}).get('name', target_gid)}」")
+        else:
+            self.status.configure(text=" 無法合併（不可移入自己的子群組）")
 
     def _remove_from_group(self):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
@@ -1316,16 +2131,52 @@ class App(tk.Tk):
                                     else " 選取的訊號不在任何群組中"))
 
     def _dissolve_group(self, gid):
-        for s in self.model.signals:        # 整組拆掉、成員回預設色
-            if s.get("group") == gid:
-                s["group"] = None; s["color"] = None
-        self.model.groups.pop(gid, None)
+        self.model.ungroup([gid])           # 解散：children 提升一層 (保留巢狀子群組)
         self.render()
-        self.status.configure(text=" 已解散群組（成員保留、顏色回預設）")
+        self.status.configure(text=" 已解散群組（成員/子群組保留、提升一層）")
+
+    def _delete_group(self, gid):
+        nm = self.model.groups.get(gid, {}).get("name", gid)
+        node = self.model._find_group_node(gid)
+        n = len(self.model._dfs_leaves([node])) if node else 0
+        if not messagebox.askyesno("刪除群組",
+                                   f"確定刪除群組「{nm}」及其 {n} 條訊號？此動作無法復原。"):
+            return
+        self.model.delete_group(gid)
+        if self.model.signals:
+            self.selected = min(self.selected, len(self.model.signals) - 1)
+            self.sig_sel = {self.selected}; self._sig_anchor = self.selected
+        else:
+            self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
+        self.cell_sel = None; self._hover_node = None; self._hover_edge = None
+        self.render()
+        self.status.configure(text=f" 已刪除群組「{nm}」及 {n} 條訊號")
+
+    def _offset_group(self, gid):
+        node = self.model._find_group_node(gid)
+        by = {s["sid"]: s for s in self.model.signals}
+        members = [by[l["sid"]] for l in self.model._dfs_leaves([node])
+                   if node and l["sid"] in by]
+        if not members:
+            return
+        cur = members[0].get("offset", 0.0)
+        v = simpledialog.askfloat("群組位移", "位移 (0 ~ 0.95，整組含子群組套用相同值):",
+                                  initialvalue=cur, minvalue=0.0, maxvalue=0.95, parent=self)
+        if v is None:
+            return
+        for s in members:
+            s["offset"] = round(v, 2)
+        self.render()
+        self.status.configure(text=f" 群組整組位移設為 {round(v,2)}（{len(members)} 條）")
 
     def _copy_group(self, gid):
         meta = self.model.groups.get(gid, {})
-        members = [self._copy_signal(s) for s in self.model.signals if s.get("group") == gid]
+        node = self.model._find_group_node(gid)
+        if node is None:
+            return
+        by = {s["sid"]: s for s in self.model.signals}
+        members = [self._copy_signal(by[l["sid"]])
+                   for l in self.model._dfs_leaves([node]) if l["sid"] in by]
         if not members:
             return
         self.clip_group = {"name": meta.get("name", gid), "color": meta.get("color"),
@@ -1336,32 +2187,30 @@ class App(tk.Tk):
     def _paste_group(self):
         if not self.clip_group:
             return
-        cg = self.clip_group; sigs = self.model.signals; npd = self.model.n_periods
-        at = self.selected + 1                  # 插在選取所屬群組尾端 (避免分裂)
-        if 0 <= self.selected < len(sigs):
-            g = sigs[self.selected].get("group")
-            if g:
-                j = self.selected
-                while j < len(sigs) and sigs[j].get("group") == g:
-                    j += 1
-                at = j
+        cg = self.clip_group; npd = self.model.n_periods
         gid = self.model.new_gid()
         gname = self._unique_name(cg["name"], {me.get("name") for me in self.model.groups.values()})
-        names = {s["name"] for s in sigs}
-        block = []
+        names = {s["name"] for s in self.model.signals}
+        children = []
         for sd in cg["signals"]:
             ns = self._copy_signal(sd)
             ns["name"] = self._unique_name(ns["name"], names); names.add(ns["name"])
             ns["group"] = gid
+            ns["sid"] = self.model._new_sid()        # 複本需有獨立 sid
             while len(ns["cells"]) < npd:
                 ns["cells"].append(self.model.new_cell("L"))
             del ns["cells"][npd:]
-            block.append(ns)
-        sigs[at:at] = block
-        self.model.groups[gid] = {"name": gname, "collapsed": False, "color": cg.get("color")}
-        self.sig_sel = set(range(at, at + len(block))); self.selected = at; self._sig_anchor = at
+            self.model.signals.append(ns)            # 加入實體池
+            children.append({"type": "sig", "sid": ns["sid"]})
+        self.model.group_tree.append({"type": "group", "gid": gid, "name": gname,
+                                      "collapsed": False, "color": cg.get("color"),
+                                      "children": children})
+        self.model._after_tree_change()
+        sids = {c["sid"] for c in children}
+        newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
+        self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
         self.render()
-        self.status.configure(text=f" 已貼上群組「{gname}」（{len(block)} 條，新群組）")
+        self.status.configure(text=f" 已貼上群組「{gname}」（{len(children)} 條，新群組於底部）")
 
     def _toggle_group(self, gid):
         meta = self.model.groups.get(gid)
@@ -1405,7 +2254,7 @@ class App(tk.Tk):
             return
         for s in reversed(targets):
             self.model.remove_signal(s)
-        self.model.prune_groups()
+        self.model.prune_groups(); self.model.prune_annotations()
         if self.model.signals:
             self.selected = min(targets[0], len(self.model.signals) - 1)
             self.sig_sel = {self.selected}; self._sig_anchor = self.selected
@@ -1437,7 +2286,7 @@ class App(tk.Tk):
         try:
             with open(path, encoding="utf-8") as f:
                 d = json.load(f)
-            self.model.load_dict(d)
+            cleared = self.model.load_dict(d)
             if "view" in d:
                 self.geom.load(d["view"])
                 self.sp_w.delete(0, tk.END); self.sp_w.insert(0, str(self.geom.period_w))
@@ -1445,25 +2294,44 @@ class App(tk.Tk):
                 self.sp_r.delete(0, tk.END); self.sp_r.insert(0, str(int(self.geom.ramp_ratio * 100)))
             self.sp_p.delete(0, tk.END); self.sp_p.insert(0, str(self.model.n_periods))
             self.selected = 0; self.sig_sel = {0}; self._sig_anchor = 0
-            self.cell_sel = None; self._refresh_offset_field(); self.render()
+            self.cell_sel = None
+            self._hover_node = None; self._hover_edge = None
+            self._refresh_offset_field(); self.render()
+            cn, ce = cleared or (0, 0)
+            if cn or ce:
+                self.status.configure(
+                    text=f" 已開啟；偵測到無法對應的標注，已清除錨點 {cn}、關係線 {ce}")
         except Exception as ex:
             messagebox.showerror("開啟失敗", str(ex))
 
     def do_export(self):
         path = filedialog.asksaveasfilename(defaultextension=".png",
-                filetypes=[("PNG 圖片", "*.png"), ("EPS 向量圖", "*.eps"), ("PostScript", "*.ps")])
+                filetypes=[("PNG 圖片", "*.png"), ("SVG 向量圖", "*.svg"),
+                           ("EPS 向量圖", "*.eps"), ("PostScript", "*.ps")])
         if not path:
             return
-        total_h = self.geom.header_h + len(self.model.signals) * self.geom.row_h
+        rows = self.model.layout()
+        total_h = self.geom.header_h + len(rows) * self.geom.row_h
         max_off = max((s.get("offset", 0.0) for s in self.model.signals), default=0.0)
         wave_w = self.model.n_periods * self.geom.period_w + max_off * self.geom.period_w
-        if path.lower().endswith(".png"):
+        lo = path.lower()
+        if lo.endswith(".png"):
+            scale = simpledialog.askinteger("PNG 解析度", "倍率 (1~4，越大越清晰):",
+                                            initialvalue=2, minvalue=1, maxvalue=4, parent=self)
+            if scale is None:
+                return
             try:
-                self._export_png(path, int(self.geom.name_w + wave_w), int(total_h))
-                messagebox.showinfo("匯出", f"已輸出:\n{path}")
+                self._export_png(path, scale)
+                messagebox.showinfo("匯出", f"已輸出 PNG（{scale}× 解析度）:\n{path}")
             except ImportError:
                 messagebox.showwarning("匯出",
                     "PNG 匯出只需要 Pillow（不需要 Ghostscript）。\n請先安裝：\n  pip install pillow")
+            except Exception as ex:
+                messagebox.showerror("匯出失敗", str(ex))
+        elif lo.endswith(".svg"):
+            try:
+                self._export_svg(path)
+                messagebox.showinfo("匯出", f"已輸出 SVG（向量、可無限縮放）:\n{path}")
             except Exception as ex:
                 messagebox.showerror("匯出失敗", str(ex))
         else:                                   # EPS / PS：tkinter 內建，無需任何套件
@@ -1473,19 +2341,123 @@ class App(tk.Tk):
             self.cell_sel = sel; self.render()
             messagebox.showinfo("匯出", f"已輸出:\n{path}")
 
-    def _export_png(self, path, w, h):
+    def _export_png(self, path, scale):
         from PIL import Image, ImageDraw
-        fonts = _load_pil_fonts()
-        NW = self.geom.name_w
-        wave_w = max(1, w - NW)
-        name_img = Image.new("RGB", (max(1, NW), max(1, h)), Style.CANVAS_BG)
-        wave_img = Image.new("RGB", (wave_w, max(1, h)), Style.CANVAS_BG)
-        nd = PILCanvas(ImageDraw.Draw(name_img), fonts)
-        wd = PILCanvas(ImageDraw.Draw(wave_img), fonts)
-        self.engine.draw(nd, wd, self.model, set(), self.geom, None)   # 不含選取高亮
-        final = Image.new("RGB", (max(1, w), max(1, h)), Style.CANVAS_BG)
+        g = self.geom.copy_scaled(scale)
+        fonts = _load_pil_fonts(scale)
+        rows = self.model.layout()
+        NW = g.name_w
+        total_h = max(1, g.header_h + len(rows) * g.row_h)
+        max_off = max((s.get("offset", 0.0) for s in self.model.signals), default=0.0)
+        wave_w = max(1, int(g.period_w * self.model.n_periods + max_off * g.period_w))
+        name_img = Image.new("RGB", (max(1, NW), total_h), Style.CANVAS_BG)
+        wave_img = Image.new("RGB", (wave_w, total_h), Style.CANVAS_BG)
+        nd = PILCanvas(ImageDraw.Draw(name_img), fonts, scale=scale)
+        wd = PILCanvas(ImageDraw.Draw(wave_img), fonts, scale=scale)
+        self.engine.draw(nd, wd, self.model, set(), g, None)   # 不含選取高亮
+        final = Image.new("RGB", (NW + wave_w, total_h), Style.CANVAS_BG)
         final.paste(name_img, (0, 0)); final.paste(wave_img, (NW, 0))
         final.save(path)
+
+    def _export_svg(self, path):
+        g = self.geom; rows = self.model.layout()
+        NW = g.name_w
+        total_h = g.header_h + len(rows) * g.row_h
+        max_off = max((s.get("offset", 0.0) for s in self.model.signals), default=0.0)
+        wave_w = int(g.period_w * self.model.n_periods + max_off * g.period_w)
+        W, H = NW + wave_w, total_h
+        elems = []
+        name_sc = SVGCanvas(elems, xoff=0)
+        wave_sc = SVGCanvas(elems, xoff=NW)
+        self.engine.draw(name_sc, wave_sc, self.model, set(), g, None)
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+               f'viewBox="0 0 {W} {H}">\n'
+               f'<rect x="0" y="0" width="{W}" height="{H}" fill="{Style.CANVAS_BG}"/>\n'
+               + "\n".join(elems) + "\n</svg>\n")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(svg)
+
+    # ---- WaveDrom 匯出 (交換格式；顏色/統一斜率視覺不保留，node/edge 可帶過去) ----
+    def do_export_wavedrom(self):
+        path = filedialog.asksaveasfilename(
+            title="匯出 WaveDrom JSON", defaultextension=".json",
+            filetypes=[("WaveDrom JSON", "*.json"), ("所有檔案", "*.*")])
+        if not path:
+            return
+        try:
+            self._export_wavedrom(path)
+            messagebox.showinfo("匯出 WaveDrom",
+                                f"已輸出 WaveDrom JSON：\n{path}\n\n"
+                                "可貼到 wavedrom.com 或用 wavedrom-cli 算圖。\n"
+                                "註：顏色與統一斜率等視覺由 WaveDrom 自行重畫，不會保留。")
+        except Exception as ex:
+            messagebox.showerror("匯出失敗", str(ex))
+
+    def _export_wavedrom(self, path):
+        m = self.model
+        basech = {"CLK": "p", "H": "1", "L": "0", "HiZ": "z", "Unknown": "x", "BUS": "="}
+        sid_nodes = {}                          # sid -> {period: nid}
+        for nid, nd in m.nodes.items():
+            sid_nodes.setdefault(nd["sid"], {})[nd["period"]] = nid
+
+        def sig_obj(s):
+            chars, data = [], []
+            pt = ptxt = None
+            for c in s["cells"]:
+                t = c["type"]; txt = c.get("text", "")
+                same = (pt == "BUS" and txt == ptxt) if t == "BUS" else (t == pt)
+                if pt is not None and same:
+                    chars.append(".")
+                else:
+                    ch = basech.get(t, "x"); chars.append(ch)
+                    if ch == "=":
+                        data.append(txt)
+                pt, ptxt = t, txt
+            o = {"name": s["name"], "wave": "".join(chars)}
+            if data:
+                o["data"] = data
+            off = s.get("offset", 0.0)
+            if off:
+                o["phase"] = -round(off, 3)     # WaveDrom phase 正值=左移，故取負
+            nm = sid_nodes.get(s.get("sid"))
+            if nm:
+                arr = ["."] * m.n_periods
+                for p, nid in nm.items():
+                    if 0 <= p < m.n_periods:
+                        arr[p] = nid
+                o["node"] = "".join(arr)
+            return o
+
+        by_sid = {s["sid"]: s for s in m.signals}
+
+        def walk(nodes):
+            out = []
+            for nd in nodes:
+                if nd.get("type") == "group":
+                    grp = [nd.get("name", nd.get("gid", ""))]
+                    grp += walk(nd.get("children", []))
+                    out.append(grp)
+                else:
+                    s = by_sid.get(nd.get("sid"))
+                    if s is not None:
+                        out.append(sig_obj(s))
+            return out
+        sig = walk(m.group_tree)
+
+        doc = {"signal": sig}
+        if m.edges:
+            op = {"double": "<->", "single": "->", "measure": "-"}
+            ed = []
+            for e in m.edges:
+                if e["frm"] in m.nodes and e["to"] in m.nodes:
+                    line = f'{e["frm"]}{op.get(e.get("style", "double"), "<->")}{e["to"]}'
+                    if e.get("label"):
+                        line += f' {e["label"]}'
+                    ed.append(line)
+            if ed:
+                doc["edge"] = ed
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2)
 
     def help_usage(self):
         messagebox.showinfo("使用說明",
@@ -1495,22 +2467,32 @@ class App(tk.Tk):
             "【框選 (畫布)】Shift 或 Ctrl + 拖曳都是純框選：\n"
             "  · 框選後按元件鍵 = 整塊填入 (BUS 問一次文字)。\n"
             "  · Ctrl+C 複製、移到目標格 Ctrl+V 貼上 (超出列數自動新增列)。\n"
-            "【名稱欄多選】Ctrl+點擊加選、Shift+點擊範圍；對選取的訊號：\n"
-            "  · 右鍵選單可「調色／清色／設定位移／改名／刪除」(套用到所有選取)。\n"
-            "  · Ctrl+C 複製選取訊號、Ctrl+V 貼在選取列之後 (名稱自動去重)。\n"
-            "【其他】右鍵清成 L；雙擊名稱改名；Esc 清除框選。\n"
-            "  · Ctrl+C/V 會依你最後操作的是「名稱多選」或「格框選」自動分流。")
+            "【名稱欄】點選訊號 (Ctrl/Shift 多選)；按住上下拖曳可移動：\n"
+            "  · 拖到群組標頭下半/群組內 = 併入該群組(游標位置即插入點，合併+排序一次到位)。\n"
+            "  · 拖到群組標頭上半 = 移到該群組之前(同層)；拖到頂層訊號間 = 移出到頂層。\n"
+            "  · 拖群組標頭 = 整組移動，落在另一群組上即巢狀為子群組(不可落入自己子孫)。\n"
+            "  · 拖曳時背景反灰、點亮將落入的容器並顯示插入線。\n"
+            "  · 群組標頭右鍵：折疊/調色/群組位移/複製/合併(巢狀)/解散/刪除(含成員)。\n"
+            "  · 巢狀：訊號右鍵「合併至群組」可放入；群組右鍵「合併至群組」成為子群組。\n"
+            "【標注】波形右鍵 →「在此建立錨點」(吸附到最近的格邊緣)。\n"
+            "  · 游標移到錨點上會高亮；按住錨點拖曳到另一錨點即建立關係線\n"
+            "    (拉線時波形會反灰冷凍，凸顯前景)；放開後輸入標籤 (如 t_su)。\n"
+            "  · 錨點/關係線：游標移上去高亮後按 Del 刪除；關係線右鍵可改標籤/箭頭樣式。\n"
+            "【位移】右移 offset 後左緣自動延伸第一格準位、右端裁齊，呈現延續感。\n"
+            "【匯出】圖片 PNG(1–4×)/SVG(向量)/EPS；另可匯出 WaveDrom JSON 交換格式。\n"
+            "【其他】波形右鍵亦可「清成 L」；雙擊名稱改名；Esc 清除框選。")
 
     def help_keys(self):
         messagebox.showinfo("快捷鍵",
             "Ctrl+N/O/S/E 新增/開啟/儲存/匯出   Ctrl+C/V 複製/貼上\n"
             "1~6 切換元件 (CLK/H/L/BUS/HiZ/Unknown)\n"
             "Shift/Ctrl+拖曳 框選   按元件鍵=填入框選   Esc 清除框選\n"
-            "名稱欄 Ctrl/Shift+點擊 多選 -> 右鍵選單(調色/位移/改名/刪除)\n"
-            "右鍵 清成 L   雙擊名稱 改名")
+            "名稱欄 Ctrl/Shift+點擊 多選 -> 右鍵選單(調色/位移/群組/改名/刪除)\n"
+            "波形右鍵 建立錨點/清成L；拖曳錨點拉關係線；Del 刪除標注\n"
+            "雙擊名稱 改名")
 
     def help_about(self):
-        messagebox.showinfo("關於", "RetroWave v1.7\n數位電路波型繪製工具\nPython + tkinter")
+        messagebox.showinfo("關於", "RetroWave v1.17\n數位電路波型繪製工具\nPython + tkinter")
 
 
 if __name__ == "__main__":

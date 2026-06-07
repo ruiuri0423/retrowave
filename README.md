@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.24**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.25**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -25,6 +25,11 @@ templates, and export to PNG, SVG or EPS.
   vertical drift does not affect other rows).
 - BUS cells preserve existing data when brushed over; click an existing BUS cell
   again to edit its value.
+
+**Undo / Redo**
+- `Ctrl+Z` / `Ctrl+Y`, last **5 steps**. One gesture = one step: a whole brush stroke,
+  block fill, or paste reverts atomically; no-op gestures aren't recorded. Destructive
+  operations (delete signals/group, New, Open) are undoable too.
 
 **Editing & selection**
 - **Pan mode** (`Esc`): deselects the tool so plain left-drag pans the canvas —
@@ -203,6 +208,7 @@ Both `python -m pytest` and the `ast.parse` syntax check must pass before a comm
 | `1`–`6` | Select element (CLK / H / L / BUS / HiZ / Unknown) |
 | Shift or Ctrl + drag | Box-select on canvas (draw or pan mode) |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste (cells, signals, or group — by last selection) |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo (last 5 steps; one gesture = one step) |
 | `Esc` | Pan mode: clear selection + deselect tool; left-drag then pans the canvas |
 | Right-click on a cell | Clear to Low |
 | Double-click a name | Rename |

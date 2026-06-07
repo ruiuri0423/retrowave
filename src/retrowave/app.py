@@ -283,6 +283,8 @@ class App(tk.Tk):
         self.bind("<Control-v>", lambda e: self.do_paste())
         self.bind("<Escape>", lambda e: self._enter_pan_mode())
         self.bind("<Delete>", lambda e: self._del_hovered_annot())
+        self.bind("<Control-z>", lambda e: self.do_undo())
+        self.bind("<Control-y>", lambda e: self.do_redo())
 
         def keyed(fn):
             def handler(e):
@@ -1184,6 +1186,37 @@ class App(tk.Tk):
             self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
         self.cell_sel = None; self._refresh_offset_field(); self.request_render()
 
+    # ---- Undo / Redo（快照式，深度 5；一個手勢 = 一步）----
+    def do_undo(self):
+        if self._is_typing():
+            return
+        if self.doc.undo():
+            self._after_history_jump("已復原")
+        else:
+            self.status.configure(text=" 沒有可復原的步驟")
+
+    def do_redo(self):
+        if self._is_typing():
+            return
+        if self.doc.redo():
+            self._after_history_jump("已重做")
+        else:
+            self.status.configure(text=" 沒有可重做的步驟")
+
+    def _after_history_jump(self, verb):
+        """undo/redo 後文件已整份置換：夾住選取、清掉指向舊內容的暫態。"""
+        n = len(self.model.signals)
+        self.selected = min(self.selected, n - 1) if n else 0
+        self.sig_sel = {self.selected} if n else set()
+        self._sig_anchor = self.selected if n else None
+        self.cell_sel = None; self._hover = None
+        self._hover_node = None; self._hover_edge = None
+        self.sp_p.delete(0, tk.END); self.sp_p.insert(0, str(self.model.n_periods))
+        self.request_render()
+        u, r = self.doc.history()
+        self.status.configure(
+            text=f" {verb}（可復原 {u}/{self.doc.UNDO_DEPTH}、可重做 {r}）")
+
     def do_new(self):
         if messagebox.askyesno("新增", "清空目前內容並新建？"):
             self.doc.new_document()
@@ -1313,6 +1346,7 @@ class App(tk.Tk):
     def help_keys(self):
         messagebox.showinfo("快捷鍵",
             "Ctrl+N/O/S/E 新增/開啟/儲存/匯出   Ctrl+C/V 複製/貼上\n"
+            "Ctrl+Z/Y 復原/重做（最近 5 步；一次筆刷/填入/貼上=一步）\n"
             "1~6 切換元件 (CLK/H/L/BUS/HiZ/Unknown)\n"
             "Esc 拖曳模式(取消元件選擇/清除框選)；拖曳模式下左鍵拖曳=平移畫布\n"
             "Shift/Ctrl+拖曳 框選(兩種模式皆可)   按元件鍵=填入框選\n"

@@ -141,6 +141,10 @@ class Document:
     def can_redo(self):
         return bool(self._redo)
 
+    def history(self):
+        """讀：(可復原步數, 可重做步數)，供 shell 顯示狀態。"""
+        return len(self._undo), len(self._redo)
+
     def undo(self):
         if self._txn is not None or not self._undo:
             return False

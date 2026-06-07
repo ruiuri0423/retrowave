@@ -119,7 +119,7 @@ src/retrowave/
 | **v1.23** ✅ | **匯出抽離**：`_export_png/svg/wavedrom` → `export.py` 純函式 `(model, geom) → file` | `test_export.py`（SVG 結構/虛線/位移寬度、WaveDrom 波形字串/巢狀群組/phase/edge、PNG 2× 尺寸） |
 | **v1.24 前置** ✅ | **Model 函式分類**（不拆類 — 評估結論：現階段單一 Model 已足夠靈活，先以 §7 分類表明確化各 function 性質與修改風險） | §7 分類表與程式碼一致 |
 | **v1.24** ✅ | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規（三層架構見 §8） | `test_document.py`（19 tests：命令/事件合併/錯誤策略/交易/undo 基建）+ 邊界測試禁 app 私有存取 |
-| **v1.25** | **Undo/Redo**：快照式（§14.5），`Ctrl+Z/Y` | 手勢級 undo 測試（一次筆刷 = 一步） |
+| **v1.25** ✅ | **Undo/Redo**：快照式（§14.5），`Ctrl+Z/Y`，深度 5；undo/redo 後夾住選取、清舊暫態 | `test_undo_ui.py`（8 tests：筆刷/填入/貼上=單步、無變更不入棧、深度 5、空棧安全） |
 | 後續 | 增量重繪（dirty rows，靠 §14.4 scope）、App controller 拆分、VCD import | — |
 
 ### 已知技術債（上表未涵蓋）

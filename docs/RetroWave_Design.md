@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.24** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.25** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -1087,6 +1087,14 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.25** — **Undo / Redo (user-facing).** `Ctrl+Z` / `Ctrl+Y`, snapshot-based at the command
+  boundary (§14.5), depth **5**. One gesture = one step: a whole brush stroke, block fill, or
+  paste (including auto-added rows) reverts atomically; gestures that change nothing (painting
+  an identical value, cancelled dialogs) are not recorded. After a history jump the shell clamps
+  selection, clears stale transient state, and reports remaining undo/redo counts in the status
+  bar. Destructive commands (delete group/signals, new, load) are equally undoable — the delete
+  confirmation no longer claims "cannot be undone". Guards: `tests/test_undo_ui.py` (8 gesture
+  tests) on top of the v1.24 document-layer undo tests.
 - **v1.24** — **Transfer layer (§14 implemented; no user-visible behaviour change).** New
   `document.py`: a `Document` facade owning the `Model`. All ~30 shell mutation sites now go
   through named commands (cells / signals / groups / paste / template / annotations /

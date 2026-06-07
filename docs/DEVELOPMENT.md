@@ -113,7 +113,8 @@ src/retrowave/
 |---|---|---|
 | **v1.22** ✅ | **套件拆分**：`src/retrowave.py` → `src/retrowave/` 套件（`model` / `elements` / `engine` / `backends` / `templates` / `geometry` / `theme` / `app`），行為零變更 | 既有測試原樣全綠 + `test_module_boundaries.py`（headless 子行程鐵證、AST 禁 tkinter、re-export 完整、版本單一來源） |
 | **v1.23** ✅ | **匯出抽離**：`_export_png/svg/wavedrom` → `export.py` 純函式 `(model, geom) → file` | `test_export.py`（SVG 結構/虛線/位移寬度、WaveDrom 波形字串/巢狀群組/phase/edge、PNG 2× 尺寸） |
-| **v1.24** | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規 | 邊界測試：App 原始碼不得出現 `model._` 與直接結構操作；命令層 headless 測試 |
+| **v1.24 前置** ✅ | **Model 函式分類**（不拆類 — 評估結論：現階段單一 Model 已足夠靈活，先以 §7 分類表明確化各 function 性質與修改風險） | §7 分類表與程式碼一致 |
+| **v1.24** | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規（三層架構見 §8） | 邊界測試：App 原始碼不得出現 `model._` 與直接結構操作；命令層 headless 測試 |
 | **v1.25** | **Undo/Redo**：快照式（§14.5），`Ctrl+Z/Y` | 手勢級 undo 測試（一次筆刷 = 一步） |
 | 後續 | 增量重繪（dirty rows，靠 §14.4 scope）、App controller 拆分、VCD import | — |
 
@@ -122,3 +123,140 @@ src/retrowave/
 - `App` 仍是 1,400+ 行上帝類別（96 方法）— v1.24 後拆 controller。
 - 選取/hover 等暫態與文件內容混在 App 屬性裡 — 命令層引入時順勢歸類（§14.1）。
 - PNG 匯出的虛線網格目前是實線（PIL 後端無 dash）— roadmap 既有項目。
+
+## 7. Model 函式分類（值 / 算 / 流）
+
+> 目的：不拆類的前提下，明確每個 function 的**性質**與**修改風險**。三類定義：
+>
+> - **值** — 純回覆數值/資料或單一賦值；無遍歷、無遞迴，看一眼即懂。改動風險低。
+> - **算** — 內含演算法（遞迴/搜尋/重排/過濾）；模組的「智力」所在。**改它必配單元測試**。
+> - **流** — 自己幾乎不運算，**編排**「值/算」成用例流程。改它要檢查：呼叫順序、
+>   失敗回滾、是否以對帳（`_after_tree_change`）收尾。
+>
+> ✏ 欄 = 副作用（寫入什麼）；「—」= 純讀。分組沿用 §5 討論的參照層級（L0–L3）。
+
+### L0 實體層（訊號池；不知道樹的存在）
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `new_cell` | 值 | — | cell dict 工廠 |
+| `_new_sid` | 值 | `_sid_seq` | 發號器（遞增後回號） |
+| `set_cell` | 值 | `cells` | 邊界檢查 + 整格替換 |
+| `set_n_periods` | 算 | `cells` `n_periods` | 全池補齊/截斷迴圈 |
+| `add_signal` | 流 | pool + tree | 發號→建 dict→掛頂層葉（**已知 L0+L1 滲漏點**，v1.24 命令化時改由協調者分派） |
+| `remove_signal` | 流 | pool + tree + groups | 刪池→摘葉→剪空→重建快取（注意：未走完整 `_after_tree_change`，因池已自行刪除、無需 resync） |
+| `_demo` | 流 | `cells` | 啟動示範資料 |
+
+### L1 參照結構層（群組樹拓撲；只認 sid/gid，不碰訊號內容）
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `_dfs_leaves` | 算 | — | 遞迴攤平 → 正典葉序 |
+| `_find_group_node` / `_find_leaf_loc` / `_locate` | 算 | — | 遞迴搜尋（gid / sid / 任意述詞） |
+| `_container_children` | 值 | — | 分派：None→樹根，否則委派 `_find_group_node` |
+| `_is_self_or_descendant` | 算 | — | 兩段搜尋組合（巢狀防環） |
+| `_top_index_of_sid` | 算 | — | 線性掃描 + 子樹成員測試 |
+| `_detach_sid` / `_detach_group` | 算 | tree | 遞迴搜尋**＋摘除**（鐵則 4 的「摘」半步） |
+| `new_gid` | 值 | `_gid_seq` | 發號器（含撞名防護迴圈） |
+| `move_leaf_to` / `move_group_to` | 流 | tree | **marker 三步驟編排**（插佔位→摘→取代）＋失敗撤回 marker；對帳收尾 |
+
+### L2 對帳層（唯一允許同時讀寫兩個域的地方）
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `_prune_empty_groups` | 算 | tree | 遞迴剪除空群組 |
+| `_resync_signals` | 算 | pool + tree | **池序 := DFS 葉序**（鐵則 3 的執行者）＋漏葉補回修復 |
+| `_reindex_groups` | 算 | `groups`、`signal["group"]` | 遞迴重建快取 |
+| `_after_tree_change` | 流 | （上三者） | 固定順序管線：剪→排→建。**所有樹變更的標準收尾** |
+| `prune_groups` | 流 | tree + groups | 公開精簡版（剪＋重建） |
+| `prune_annotations` | 算 | nodes + edges | 孤兒錨點/斷頭關係線過濾，回報清除數 |
+
+### 用例動詞（公開 API；組合 L0/L1，以 L2 收尾）
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `group_signals` | 流 | tree + groups | 葉序排序選取→marker→摘 N 葉→建群組節點 |
+| `merge_into_group` / `merge_groups` | 流 | tree | 摘→附加到目標 children（merge_into 有「已在目標群」跳過判斷 — **L1 流程讀訊號內容的滲漏點**） |
+| `remove_from_group` | 流 | tree + `color` | marker 法批次移出到頂層＋清自訂色 |
+| `ungroup` | 流 | tree | 遞迴尋標的→children 就地提升一層 |
+| `delete_group` | 流 | 全域 | 摘子樹→池中刪 sids→對帳→剪標注（唯一動到四個域的動詞） |
+
+### 標注（平行參照集；只認 sid）
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `new_nid` | 算 | — | 字母配號搜尋（a..z → aa..zz） |
+| `add_node` / `add_edge` | 值 | nodes / edges | 驗證＋寫入（edge 拒自迴圈與無效端點） |
+| `remove_node` | 值 | nodes + edges | 刪錨＋級聯過濾關係線 |
+
+### L3 投影（唯讀衍生查詢）
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `layout` | 算 | — | 遞迴展開樹→`Row` 列表；折疊不展開；色彩繼承（最近祖先勝） |
+
+### 持久化
+
+| 方法 | 類 | ✏ | 說明 |
+|---|---|---|---|
+| `to_dict` | 值 | — | 組裝可序列化 dict |
+| `_all_group_nodes` | 算 | — | 遞迴收集全部群組節點 |
+| `_migrate_flat_to_tree` | 算 | tree | 舊扁平格式→單層樹 |
+| `load_dict` | 流 | 全域 | 正規化訊號→建樹（新舊分流）→還原序號→對帳→剪標注 |
+
+**閱讀/修改指引**：動「算」先寫測試釘住行為；動「流」核對編排順序與收尾；
+「值」風險最低但發號器（`_new_sid`/`new_gid`）攸關鐵則 2，不可繞過。
+
+## 8. 三層架構目標圖（v1.24 討論基礎）
+
+> 狀態：設計定案、待討論後實施。對應設計文件 §14（語言無關契約）；本節是程式碼層面的落地圖。
+
+```
+╔═ 應用層 ═══════════════════════════════════════════════════╗
+║  shell（tkinter 殼）            呈現核心（headless 繪圖）      ║
+║  app.py：手勢→命令、對話框、     elements / engine / backends  ║
+║  暫態(工具/選取/hover/marquee)、 export（讀 model 畫圖，不寫）  ║
+║  request_render、EPS 快照                                    ║
+╚═══════╤══════════════════════════════════▲═════════════════╝
+        │ ① 命令（純資料,sid/gid/nid）        │ ③ changed(scope) 事件
+        ▼                                   │    （注入的 scheduler 合併派發）
+╔═ 傳遞層 ═══════════════════════════════════╧═══════════════╗
+║  document.py：命令目錄(§14.3)、驗證、undo 快照、              ║
+║               begin/commit 手勢交易、subscribe/事件派發       ║
+║  jobs.py（未來）：worker thread + queue（VCD/大檔/高倍PNG）   ║
+╚═══════╤════════════════════════════════════════════════════╝
+        │ ② 內部方法呼叫（唯一允許進入邏輯層的寫路徑）
+        ▼
+╔═ 邏輯層 ═══════════════════════════════════════════════════╗
+║  model.py（單一 Model，函式分類見 §7）                        ║
+║  layout 純函式 + 命中測試數學（自 app 下放）   templates.py    ║
+╚════════════════════════════════════════════════════════════╝
+
+共用底盤（無方向性）：theme.py、geometry.py（純值物件/常數）
+讀路徑（CQRS）：engine.draw(model, geom) 唯讀直通邏輯層，不過傳遞層
+```
+
+### 邊界規則（import 方向矩陣；v1.24 起以 AST 測試強制）
+
+| 層 | 准 import | 禁止 |
+|---|---|---|
+| 共用底盤 | （無） | 任何套件內模組 |
+| 邏輯層（model/templates） | 共用底盤 | document / engine / app、tkinter |
+| 傳遞層（document） | 邏輯層、共用底盤 | engine / backends / app、**tkinter**（scheduler 注入） |
+| 呈現核心（elements/engine/backends/export） | 邏輯層（唯讀）、共用底盤 | document、app、tkinter |
+| shell（app） | 全部 | — |
+
+### 已定案的設計決策
+
+1. **命令同步執行、事件非同步合併**（方案 B）：shell 下完命令立刻可讀回新狀態；
+   `changed(scope)` 走注入的 scheduler（tk 下= `after_idle`，測試下=同步呼叫）合併派發。
+   真正耗時工作（VCD/大檔）另走 `jobs.py` 的 worker queue，與命令通道分離。
+2. **具名方法外皮 + `_apply` 單一咽喉**：`doc.set_cell(...)` 等方法內部統一走
+   `_apply(name, args)`（執行→驗 §2.6 不變量→undo 快照→排程事件）；命令即資料，
+   未來錄製/重播免改呼叫端。
+3. **`begin()/commit()` 手勢交易**：一次筆刷（press→release）= 一個 undo 單位 =
+   至多一個事件（R5），拖曳中即時生效的手感不變。
+4. **事件 scope 先粗粒度**：`{cells, structure, annotations, document}`，全部映射到
+   `request_render`；增量重繪需要 dirty-rows payload 時再細化。
+5. **CQRS**：寫嚴格走 document；讀（engine/layout/命中測試）唯讀直通 model。
+6. **暫態歸 shell**：工具/選取/hover/marquee/拖曳狀態不進文件、不持久化、不可 undo。

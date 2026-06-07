@@ -156,6 +156,52 @@ def test_copy_paste_cells_auto_adds_rows(app):
     assert_invariants(app.model)
 
 
+# ---------------------------------------------------------------- 標注 / 拖曳修正（v1.26）
+def test_pan_mode_can_drag_annotation_edge(app, monkeypatch):
+    """拖曳模式下按住錨點應拉關係線（錨點優先於平移）。"""
+    import retrowave.app as app_mod
+    monkeypatch.setattr(app_mod.simpledialog, "askstring", lambda *a, **k: "t_x")
+    a = app.doc.add_anchor(app.model.signals[0]["sid"], 2, "start")
+    b = app.doc.add_anchor(app.model.signals[1]["sid"], 5, "start")
+    app._enter_pan_mode()
+    pos = app._node_screen_positions()
+    ax, ay = map(int, pos[a]); bx, by = map(int, pos[b])
+    app.on_press(Ev(ax, ay))
+    assert app._connecting and not app._panning      # 進入拉線，不是平移
+    app.on_motion(Ev(bx, by))
+    app.on_release(Ev(bx, by))
+    assert len(app.model.edges) == 1
+    e = app.model.edges[0]
+    assert (e["frm"], e["to"], e["label"]) == (a, b, "t_x")
+    assert_invariants(app.model)
+
+
+def test_pan_mode_empty_press_still_pans(app):
+    """拖曳模式下按在非錨點處仍是平移。"""
+    app._enter_pan_mode()
+    app.on_press(Ev(200, 200))
+    assert app._panning and not app._connecting
+    app.on_release(Ev(200, 200))
+
+
+def test_drag_signal_out_of_bottom_group(app):
+    """群組收底（下方無頂層訊號）時，把成員拖到所有列之下 = 移出到頂層尾端。"""
+    gid = app.doc.group_signals([1, 2], name="G")
+    rows = app.model.layout()                        # [CLK, G標頭, RST_N, DATA]
+    assert rows[-1].kind == "sig"
+    g = app.geom
+    y_data = g.header_h + (len(rows) - 1) * g.row_h + g.row_h // 2
+    y_below = g.header_h + (len(rows) + 1) * g.row_h
+    app.on_name_press(Ev(10, y_data))
+    app.on_name_drag(Ev(10, y_below))
+    app.on_name_release(Ev(10, y_below))
+    data = next(s for s in app.model.signals if s["name"] == "DATA")
+    assert data["group"] is None                     # 已移出群組
+    assert app.model.signals[-1]["name"] == "DATA"   # 落在頂層尾端
+    assert gid in app.model.groups                   # 群組仍在（剩 RST_N）
+    assert_invariants(app.model)
+
+
 # ---------------------------------------------------------------- 範本插入
 def test_insert_template_fresh_sids_and_group(app, tmp_path):
     blob = {"signals": [

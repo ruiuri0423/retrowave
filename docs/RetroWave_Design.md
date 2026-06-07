@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.25** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.26** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -641,8 +641,11 @@ While in pan mode:
   *post-clamp* y-fraction so the two panes can never drift apart.
 - **Shift/Ctrl + left-drag** still performs BOX-SELECT, exactly as in paint mode; with a
   selection active, element keys fill the block as usual (filling does not leave pan mode).
-- A plain left click never paints, never starts a CONNECT drag, and keeps the current
-  box selection intact (panning is pure navigation).
+- A plain left click never paints and keeps the current box selection intact.
+- **Anchors take priority over panning**: pressing on an anchor starts a CONNECT drag
+  (freeze overlay, drop on another anchor to create a relationship line) exactly as in
+  paint mode — anchors can be created from the right-click menu in pan mode, so they must
+  be connectable here too. Pressing anywhere else pans.
 - Right-click context menus (anchors, edges, "clear to L") remain available.
 
 Exiting pan mode: click any element button or press a number key 1–6 (when no box selection is
@@ -688,8 +691,14 @@ the top level, and nesting one group inside another.
 ```
 FUNCTION COMPUTE_DROP(cursor_y):
     rows = LAYOUT()
-    r    = clamp(floor((cursor_y - header_h)/row_h), 0, len(rows)-1)
-    lower = fractional_part((cursor_y - header_h)/row_h) >= 0.5
+    rf   = (cursor_y - header_h)/row_h
+    IF rf >= len(rows):                       // below ALL rows -> move out to TOP LEVEL, at the end
+        container = NULL ; index = len(top_level_children) ; valid = true
+        RETURN                                // (without this, a group sitting at the bottom of the
+                                              //  document would trap its members: every reachable row
+                                              //  resolves to a container inside the group)
+    r    = clamp(floor(rf), 0, len(rows)-1)
+    lower = fractional_part(rf) >= 0.5
     row = rows[r]
 
     IF row.kind == group:
@@ -1087,6 +1096,14 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.26** — **Two interaction fixes.** (1) *Pan mode can drag relationship lines*: pressing on
+  an anchor now starts a CONNECT drag in pan mode too (anchor hit-test moved ahead of the pan
+  branch in `on_press`); previously anchors could be *created* in pan mode via the context menu
+  but not connected. Pressing on empty canvas still pans (§8.1a updated). (2) *Drag out of a
+  bottom group*: when a group sits at the bottom of the document, every reachable drop row
+  resolved to a container inside it, trapping its members. `COMPUTE_DROP` gains a rule —
+  cursor below ALL rows → top level, at the end (§8.3 updated). Guards: 3 new interaction
+  tests (pan-connect, pan-still-pans, drag-out-of-bottom-group).
 - **v1.25** — **Undo / Redo (user-facing).** `Ctrl+Z` / `Ctrl+Y`, snapshot-based at the command
   boundary (§14.5), depth **5**. One gesture = one step: a whole brush stroke, block fill, or
   paste (including auto-added rows) reverts atomically; gestures that change nothing (painting

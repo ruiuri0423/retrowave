@@ -518,17 +518,17 @@ class App(tk.Tk):
         cx, cy = self._ev_xy(e)
         self._press_xy = (cx, cy)
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
+        nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
+        if nid:                                   # 從錨點拉線 (進入冷凍)；繪製/拖曳模式皆可
+            self._connecting = True; self._connect_from = nid
+            self._connect_xy = (cx, cy); self._press = None
+            self._selecting = False; self._moved = False
+            self.request_render(); return
         if self.active_tool is None and not (ctrl or shift):   # 拖曳模式：左鍵=平移畫布
             self._panning = True
             self._pan_anchor = (e.x, e.y, self.wave_cv.xview()[0], self.wave_cv.yview()[0])
             self._press = None; self._selecting = False; self._moved = False
             return
-        nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
-        if nid:                                   # 從錨點拉線 (進入冷凍)
-            self._connecting = True; self._connect_from = nid
-            self._connect_xy = (cx, cy); self._press = None
-            self._selecting = False; self._moved = False
-            self.request_render(); return
         self._press = self._cell_from_xy(cx, cy)
         self._moved = False
         self._selecting = ctrl or shift          # Shift/Ctrl 拖曳皆為純框選
@@ -902,6 +902,11 @@ class App(tk.Tk):
         if not rows:
             self._drop = None; self._drop_target = None; return
         rf = (cy - HH) / RH
+        if rf >= len(rows):                     # 游標在所有列之下：移出到頂層尾端
+            top = self.doc.container_children(None)                # 群組收底時也能拖出成員
+            self._drop_target = {"container": None, "index": len(top), "valid": True}
+            self._drop = {"y": HH + len(rows) * RH, "valid": True, "hl": None}
+            return
         r = max(0, min(len(rows) - 1, int(rf)))
         lower = (rf - int(rf)) >= 0.5
         row = rows[r]

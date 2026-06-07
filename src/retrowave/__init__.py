@@ -5,7 +5,7 @@
 套件分層（設計文件 §14）：邏輯單元 (model/templates) 與繪圖單元
 (elements/engine/backends/export) 完全 headless；只有 app 模組 import tkinter。
 """
-__version__ = "1.25"
+__version__ = "1.26"
 
 from .backends import PILCanvas, SVGCanvas
 from .document import Document

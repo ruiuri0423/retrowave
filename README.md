@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.25**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.26**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -170,6 +170,8 @@ Both `python -m pytest` and the `ast.parse` syntax check must pass before a comm
 - Press `Esc` to enter **pan mode** (no element selected): left-drag pans the
   canvas, and clicks never paint. The cursor changes to a move shape.
 - Shift/Ctrl + left-drag still box-selects while panning.
+- Anchors stay fully usable in pan mode: create them from the right-click menu and
+  **drag anchor→anchor to draw relationship lines** (anchors take priority over panning).
 - Click an element button or press `1`–`6` to go back to drawing.
 
 **Select & fill a region**

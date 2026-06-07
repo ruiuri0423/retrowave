@@ -5,8 +5,9 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.21**. Single-file application (`retrowave.py`), no
-> third-party dependencies required to run (Pillow is optional, only for PNG export).
+> Status: prototype **v1.22**. A small Python package (`src/retrowave/`) with strict
+> layering — logic and drawing modules are fully headless; only `app.py` touches tkinter.
+> No third-party dependencies required to run (Pillow is optional, only for PNG export).
 
 ---
 
@@ -110,7 +111,7 @@ templates, and export to PNG, SVG or EPS.
 ## Getting started
 
 ```bash
-python src/retrowave.py
+python run.py            # or: cd src && python -m retrowave
 ```
 
 The window opens with a small demo waveform so you can start experimenting

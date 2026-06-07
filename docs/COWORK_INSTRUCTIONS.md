@@ -5,8 +5,9 @@
 > 使用前請把所有 `<...>` 占位符換成實際值。授權 GitHub（Composio）與任何憑證輸入一律由你本人完成。
 
 ## 專案背景
-- RetroWave 是一支「數位波型繪製工具」，主程式為單一 Python 檔 `src/retrowave.py`
+- RetroWave 是一支「數位波型繪製工具」，主程式為 `src/retrowave/` 套件
   （純標準庫 tkinter；PNG 匯出需 Pillow，SVG/WaveDrom 為零依賴）。
+  分層鐵則：只有 `app.py` 可以 import tkinter，其餘模組必須 headless（有測試把關）。
 - 真相來源文件：`docs/RetroWave_Design.md`（架構/演算法/重現規格）與根目錄 `README.md`。
 - 版本號慣例：程式檔頭與說明字串使用 `vMAJOR.MINOR`（目前已到 v1.17）。每次有
   功能或行為變更都要遞增 MINOR，並讓「程式版本」「設計文件 version 標記」「README」三者一致。
@@ -23,9 +24,9 @@
 
 ## 我下「收尾同步」指令時，請依序執行
 （觸發語：例如「收尾並同步 vX.Y：<變更摘要>」）
-1. 先用 `python -c "import ast; ast.parse(open('src/retrowave.py',encoding='utf-8').read())"`
-   做語法檢查；若專案內有測試或煙霧測試腳本，一併執行，全部通過才繼續。
-2. 更新版本號：把 `src/retrowave.py` 內的版本字串與相關說明同步到本次 `vX.Y`。
+1. 先用 `python -m compileall -q src` 做語法檢查，並執行 `python -m pytest`，
+   全部通過才繼續。
+2. 更新版本號：改 `src/retrowave/__init__.py` 的 `__version__`（標題/關於對話框自動帶出）。
 3. 更新 `docs/RetroWave_Design.md`：
    - 反映本次的功能/行為變更（對應到正確章節，例如群組、拖曳、匯出、標注）。
    - 更新文件開頭的 `Spec version` 標記到 `vX.Y`。
@@ -59,13 +60,16 @@
 ├── CLAUDE.md                    (AI 助手指南)
 ├── pytest.ini
 ├── .gitignore
+├── run.py                       (啟動器；或 cd src && python -m retrowave)
 ├── src/
-│   └── retrowave.py
+│   └── retrowave/               (套件：theme/geometry/model/elements/engine/
+│                                 backends/templates/app/__init__/__main__)
 ├── tests/
 │   ├── conftest.py              (不變量檢查 + fixtures)
 │   ├── test_model.py
 │   ├── test_app_interactions.py
-│   └── test_render_coalescing.py
+│   ├── test_render_coalescing.py
+│   └── test_module_boundaries.py (headless 分層把關)
 └── docs/
     ├── RetroWave_Design.md      (設計規格，語言無關)
     ├── DEVELOPMENT.md           (開發者指南，程式碼對應)

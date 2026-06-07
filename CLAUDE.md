@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-RetroWave is a digital timing/waveform editor (Win95/XP retro look) implemented as a **single Python file** `src/retrowave.py` (~2,500 lines), using only the standard library `tkinter`. Pillow is optional and only needed for PNG export.
+RetroWave is a digital timing/waveform editor (Win95/XP retro look) implemented as the `src/retrowave/` package, using only the standard library `tkinter`. Pillow is optional and only needed for PNG export. Strict layering (spec §14): `theme`/`geometry` (shared base), `model`/`templates` (logic), `elements`/`engine`/`backends` (drawing), `app` (UI shell). **Only `app.py` may import tkinter** — `tests/test_module_boundaries.py` enforces this; everything else is headless-importable.
 
 ## Commands
 
 ```bash
-python src/retrowave.py          # run the app (opens with a demo waveform)
-python -m pytest                 # full test suite (~50 tests, <1s; GUI tests briefly open a window)
+python run.py                    # run the app (or: cd src && python -m retrowave)
+python -m pytest                 # full test suite (<1s; GUI tests briefly open a window)
 python -m pytest tests/test_model.py -k group   # run a subset
-python -c "import ast; ast.parse(open('src/retrowave.py',encoding='utf-8').read())"   # syntax check
+python -m compileall -q src      # syntax check
 ```
 
 Both pytest and the syntax check are the required pre-commit gate. Tests live in `tests/`:
@@ -23,9 +23,9 @@ trips Tcl's `tcl_findLibrary`).
 
 ## Versioning rule (critical)
 
-Version convention is `vMAJOR.MINOR` (currently v1.18). Any feature or behavior change must bump MINOR and keep **three places in sync**:
+Version convention is `vMAJOR.MINOR`. Any feature or behavior change must bump MINOR and keep **three places in sync**:
 
-1. `src/retrowave.py` — module docstring, window title, and About dialog
+1. `src/retrowave/__init__.py` — `__version__` (window title and About dialog read it; never hard-code version strings elsewhere — a boundary test forbids it)
 2. `docs/RetroWave_Design.md` — the `Spec version:` line at the top **and** a new entry at the top of `## 15. Changelog`
 3. `README.md` — if the change affects user-facing features/usage
 
@@ -37,9 +37,9 @@ If the code version is ahead of the docs, backfill the missing changelog entries
 - `docs/DEVELOPMENT.md` is the code-mapped companion (design section ↔ symbol table, iron-rule↔test table, protocol violation inventory, refactoring roadmap v1.22–v1.25). Update it when symbols move.
 - `docs/COWORK_INSTRUCTIONS.md` defines the maintenance/sync workflow (in Chinese), including the "收尾同步" (wrap-up & sync) procedure: syntax check → bump versions → update design doc changelog → update README → show diff + proposed commit message → **wait for explicit user confirmation before commit/push**. Never force-push.
 
-## Architecture (all inside src/retrowave.py)
+## Architecture (src/retrowave/ package)
 
-Layered, top of file to bottom:
+One module per layer:
 
 - **`Style` / `Geometry`** — visual constants and presentation knobs (`period_w`, `row_h`, `ramp_ratio`). `Geometry.tw` is the transition width; `copy_scaled(k)` produces a scaled copy for high-res export.
 - **`Model`** — the document. Signals are a **flat pool** (list of dicts) identified by stable `sid`; nesting lives in a separate **`group_tree`** (nodes are group metadata + children). `signals` order must always equal the tree's DFS leaf order (`_resync_signals` enforces this after every tree change); `signal["group"]` is only a cached pointer to the direct parent group. Annotations (anchors/relationship edges) anchor by `sid`, never by row index. Persistence: `to_dict`/`load_dict` with migration from the older flat-group format.

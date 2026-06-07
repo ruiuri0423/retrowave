@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.21** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
+**Spec version: v1.22** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -1084,6 +1084,16 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.22** — **Package split (internal; no behaviour change).** The single file became the
+  `retrowave` package with strict layering: shared base (`theme`, `geometry`), logic unit
+  (`model`, `templates`), drawing unit (`elements`, `engine`, `backends`), and the UI shell
+  (`app`) — the only module allowed to import tkinter. `__init__` re-exports the public API and
+  lazy-loads UI names via PEP 562 so importing the core never pulls in tkinter. The program
+  version became single-source (`retrowave.__version__`; window title and About read it).
+  Launchers: `python run.py` or `python -m retrowave`. Guarded by
+  `tests/test_module_boundaries.py`: a subprocess proves core+drawing imports leave
+  `tkinter` out of `sys.modules`; an AST scan forbids tkinter imports outside `app.py`;
+  re-export completeness; no hard-coded version strings.
 - **v1.21** — **Render coalescing.** All 46 interaction call sites now go through
   `request_render()` (dirty scheduling via `after_idle`): bursts of mutations inside one
   event-loop cycle repaint once instead of once per call, with no change to the drawing code.

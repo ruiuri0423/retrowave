@@ -11,17 +11,34 @@
 - 選配：`pip install pillow`（只有 PNG 匯出需要）、`pip install pytest`（開發必裝）。
 
 ```bash
-python src/retrowave.py        # 啟動（開啟示範波形）
-python -m pytest               # 全部測試（~54 個，<1s；GUI 測試會短暫開視窗）
+python run.py                  # 啟動（開啟示範波形）；或 cd src && python -m retrowave
+python -m pytest               # 全部測試（<1s；GUI 測試會短暫開視窗）
 python -m pytest tests/test_model.py -k group        # 跑子集
-python -c "import ast; ast.parse(open('src/retrowave.py',encoding='utf-8').read())"  # 語法檢查
+python -m compileall -q src    # 語法檢查
 ```
 
 **提交門檻**：pytest 全綠 + 語法檢查通過，缺一不可。
 
 ## 2. 程式碼地圖（設計章節 ↔ 符號）
 
-全部程式碼都在 `src/retrowave.py`（單檔，由上而下分層）。對照表以符號名為準（行號會漂移，請用搜尋）：
+程式碼在 `src/retrowave/` 套件，依設計文件 §14 嚴格分層 —
+**除了 `app.py`（與 `__main__.py`）外，任何模組不得 `import tkinter`**（有邊界測試把關）：
+
+```
+src/retrowave/
+├── theme.py       Style                    共用底層（顏色/字型常數）
+├── geometry.py    Geometry                 共用底層（座標/斜率幾何）
+├── model.py       Row, DEFAULT_PERIODS, Model   邏輯單元（文件核心，headless）
+├── templates.py   TemplateLibrary          邏輯單元（範本索引）
+├── elements.py    WAVE_TYPES, *Element     繪圖單元（六種元件演算法）
+├── engine.py      Engine                   繪圖單元（單一繪製流程）
+├── backends.py    PILCanvas, SVGCanvas     繪圖單元（PNG/SVG 匯出後端）
+├── app.py         App, make_key_button     UI 殼層（唯一 tkinter 使用者）
+├── __init__.py    __version__ + re-export（UI 名稱 PEP 562 延遲載入）
+└── __main__.py    python -m retrowave
+```
+
+對照表以符號名為準（行號會漂移，請用搜尋）：
 
 | 設計章節 | 程式碼符號 | 說明 |
 |---|---|---|
@@ -63,7 +80,7 @@ python -c "import ast; ast.parse(open('src/retrowave.py',encoding='utf-8').read(
 
 1. 改程式 → `python -m pytest` 全綠。
 2. 任何**功能或行為變更**：版本號 `vMAJOR.MINOR` 遞增 MINOR，**三處同步** —
-   `retrowave.py`（檔頭 docstring、視窗標題、關於對話框）、設計文件（`Spec version` + §15 Changelog 最上方新增一條）、`README.md`（若影響使用者）。
+   `src/retrowave/__init__.py` 的 `__version__`（視窗標題與關於對話框自動帶出，**程式內不得再硬編版本字串**，有測試把關）、設計文件（`Spec version` + §15 Changelog 最上方新增一條）、`README.md`（若影響使用者）。
 3. Commit 格式：`vX.Y: <一句話摘要>`，內文條列重點。
 4. Push 前向 owner 確認（見 `COWORK_INSTRUCTIONS.md`）；禁止 force-push。
 
@@ -93,7 +110,7 @@ python -c "import ast; ast.parse(open('src/retrowave.py',encoding='utf-8').read(
 
 | 版本 | 內容 | 驗收門檻 |
 |---|---|---|
-| **v1.22** | **套件拆分**：`src/retrowave.py` → `src/retrowave/` 套件（`model` / `elements` / `engine` / `backends` / `templates` / `geometry` / `theme` / `app`），行為零變更 | 既有測試原樣全綠 + 新增邊界測試：核心模組匯入後 `tkinter not in sys.modules` |
+| **v1.22** ✅ | **套件拆分**：`src/retrowave.py` → `src/retrowave/` 套件（`model` / `elements` / `engine` / `backends` / `templates` / `geometry` / `theme` / `app`），行為零變更 | 既有測試原樣全綠 + `test_module_boundaries.py`（headless 子行程鐵證、AST 禁 tkinter、re-export 完整、版本單一來源） |
 | **v1.23** | **匯出抽離**：`_export_png/svg/wavedrom` → `export.py` 純函式 `(model, geom) → file` | 新增匯出單元測試（SVG 內容、WaveDrom schema、PNG 尺寸） |
 | **v1.24** | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規 | 邊界測試：App 原始碼不得出現 `model._` 與直接結構操作；命令層 headless 測試 |
 | **v1.25** | **Undo/Redo**：快照式（§14.5），`Ctrl+Z/Y` | 手勢級 undo 測試（一次筆刷 = 一步） |

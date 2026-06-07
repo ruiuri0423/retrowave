@@ -120,6 +120,11 @@ immediately.
 
 ## Development & tests
 
+New contributor? Start with **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — it maps every
+section of the design spec ([docs/RetroWave_Design.md](docs/RetroWave_Design.md), which is
+deliberately language-agnostic) to the actual code symbols, lists the seven iron rules with
+their guarding tests, and carries the UI↔core refactoring roadmap.
+
 A pytest suite lives under `tests/`:
 
 ```bash
@@ -243,6 +248,4 @@ never duplicated.
 
 ## License
 
-No license has been chosen yet. Until one is added, all rights are reserved by the
-author; add a `LICENSE` file (e.g. MIT) before sharing if you intend it to be
-reusable.
+[MIT](LICENSE) © 2026 Ricky (ruiuri0423).

@@ -29,7 +29,7 @@
 3. 更新 `docs/RetroWave_Design.md`：
    - 反映本次的功能/行為變更（對應到正確章節，例如群組、拖曳、匯出、標注）。
    - 更新文件開頭的 `Spec version` 標記到 `vX.Y`。
-   - 在文末 `## 14. Changelog` 區塊最上方新增一條：`- **vX.Y** — <條列本次變更>`。
+   - 在文末 `## 15. Changelog` 區塊最上方新增一條：`- **vX.Y** — <條列本次變更>`。
 4. 若變更影響使用者操作或功能清單，連帶更新 `README.md`。
 5. 列出將提交的檔案與**完整 diff 摘要**，並給我一個建議的 commit 訊息：
    格式 `vX.Y: <一句話摘要>`，內文條列重點。
@@ -55,11 +55,20 @@
 ```
 <repo 根目錄>
 ├── README.md
+├── LICENSE                      (MIT)
+├── CLAUDE.md                    (AI 助手指南)
+├── pytest.ini
 ├── .gitignore
 ├── src/
 │   └── retrowave.py
+├── tests/
+│   ├── conftest.py              (不變量檢查 + fixtures)
+│   ├── test_model.py
+│   ├── test_app_interactions.py
+│   └── test_render_coalescing.py
 └── docs/
-    ├── RetroWave_Design.md
+    ├── RetroWave_Design.md      (設計規格，語言無關)
+    ├── DEVELOPMENT.md           (開發者指南，程式碼對應)
     └── COWORK_INSTRUCTIONS.md   (本檔)
 ```
 

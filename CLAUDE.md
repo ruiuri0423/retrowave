@@ -26,14 +26,15 @@ trips Tcl's `tcl_findLibrary`).
 Version convention is `vMAJOR.MINOR` (currently v1.18). Any feature or behavior change must bump MINOR and keep **three places in sync**:
 
 1. `src/retrowave.py` — module docstring, window title, and About dialog
-2. `docs/RetroWave_Design.md` — the `Spec version:` line at the top **and** a new entry at the top of `## 14. Changelog`
+2. `docs/RetroWave_Design.md` — the `Spec version:` line at the top **and** a new entry at the top of `## 15. Changelog`
 3. `README.md` — if the change affects user-facing features/usage
 
 If the code version is ahead of the docs, backfill the missing changelog entries before committing. Commit message format: `vX.Y: <one-line summary>`.
 
 ## Documents
 
-- `docs/RetroWave_Design.md` is the **source-of-truth spec** (architecture, algorithms, invariants, reimplementation guidance). Behavior changes must be reflected in the matching section there, not just in code.
+- `docs/RetroWave_Design.md` is the **source-of-truth spec** (architecture, algorithms, invariants, reimplementation guidance). It stays language-agnostic — no Python/tkinter specifics. Behavior changes must be reflected in the matching section there, not just in code. **§14 defines the UI↔Core protocol (R1–R5)**: new code must route document mutations through commands, never poke `Model` internals from `App`.
+- `docs/DEVELOPMENT.md` is the code-mapped companion (design section ↔ symbol table, iron-rule↔test table, protocol violation inventory, refactoring roadmap v1.22–v1.25). Update it when symbols move.
 - `docs/COWORK_INSTRUCTIONS.md` defines the maintenance/sync workflow (in Chinese), including the "收尾同步" (wrap-up & sync) procedure: syntax check → bump versions → update design doc changelog → update README → show diff + proposed commit message → **wait for explicit user confirmation before commit/push**. Never force-push.
 
 ## Architecture (all inside src/retrowave.py)

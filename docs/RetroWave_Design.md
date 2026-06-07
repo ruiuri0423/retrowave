@@ -2,7 +2,7 @@
 
 **Spec version: v1.21** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
-[Changelog](#14-changelog) at the end.
+[Changelog](#15-changelog) at the end.
 
 > A complete, implementation-ready design document for the **RetroWave** digital-waveform
 > editor. It is written so that an engineer (or model) who has never seen the original code can
@@ -986,7 +986,99 @@ interaction layer separately since its branches are event-driven.
 
 ---
 
-## 14. Changelog
+## 14. UI ↔ Core protocol
+
+> **Status: design adopted (2026-06-07); implementation phased in.** Today's code still couples
+> the UI shell directly to the document (the violation inventory and migration roadmap live in
+> `docs/DEVELOPMENT.md`). New code MUST follow this protocol; existing call sites migrate per
+> the roadmap. This section is the contract — it stays language-agnostic on purpose, so the
+> same core can serve a tkinter shell today and an SVG/web shell (§12) tomorrow.
+
+### 14.1 The two sides
+
+**Document core** owns everything that is *the document*:
+- persisted content — signals (flat pool, sid identity), group tree, annotations, `n_periods`;
+- derived queries — `LAYOUT()` (§5), hit-test math (screen point → row/period given a geometry),
+  anchor positions (§7.1);
+- **commands** — the only way content changes (§14.3);
+- **change events** — the only way the outside world learns content changed (§14.4).
+
+The core is fully headless: it never imports a UI toolkit, never calls into the shell, and is
+testable without a window.
+
+**UI shell** owns everything that is *the session*:
+- input mapping (mouse/keyboard gestures → command invocations);
+- render scheduling (§6 coalescing) and all drawing surfaces;
+- dialogs, menus, status bar, clipboard UX;
+- **transient state**: active tool, selection (signals and cell range), hover, marquee,
+  drag ghost, pan anchor, connect-in-progress.
+
+Transient state is deliberately *not* document content: it is never persisted, never undoable,
+and never crosses into the core except as plain command arguments.
+
+### 14.2 Rules
+
+- **R1 — Commands only.** The shell mutates the document exclusively through named commands
+  with plain-data arguments. It never touches internal structures (signal list, group tree,
+  annotation maps) and never calls private helpers.
+- **R2 — One-way calls.** The core never calls the shell. Information flows out only as command
+  return values, query results, and change events.
+- **R3 — Plain data across the boundary.** Every argument and result crossing the boundary is
+  JSON-serializable (numbers, strings, lists, dicts, sid/gid/nid handles). No toolkit objects,
+  no live references into core internals.
+- **R4 — Invariants after every command.** A command either leaves the document satisfying all
+  §2.6 invariants or fails as a whole (no partial mutations escape).
+- **R5 — One command = one undo unit = at most one change event.** A continuous gesture
+  (e.g. a brush stroke from press to release) is *one* command; the shell accumulates it and
+  submits once, or the core offers an explicit begin/commit transaction for it.
+
+### 14.3 Command catalog (initial)
+
+Identity is always by stable handle (`sid`/`gid`/`nid`), never by row index (§2.6).
+
+| Command | Arguments | Notes |
+|---|---|---|
+| `set_cell` | sid, period, type, text | single cell |
+| `paint_stroke` | sid, periods[], type, bus_seed_text | one brush gesture; BUS continuity rules §6.3 |
+| `fill_region` | sids[], period range, type, text | box-select fill |
+| `add_signal` | name?, fill? | appends top-level |
+| `remove_signals` | sids[] | prunes annotations |
+| `rename_signal` / `set_offset` / `set_color` | sid(s), value | value=None clears color |
+| `set_periods` | n | pads/truncates cells |
+| `create_group` | sids[], name? | →gid |
+| `merge_into_group` / `merge_groups` | sids[]/gid, target gid | nest guard §2.6 |
+| `move_leaf` / `move_group` | sid/gid, container gid?, index | marker method (§8.3) |
+| `remove_from_group` / `dissolve_group` / `delete_group` | sids[] / gid / gid | |
+| `set_group_color` / `rename_group` / `toggle_collapsed` | gid, value? | |
+| `paste_cells` | at (sid, period), block | auto-adds signals |
+| `paste_signals` / `paste_group` / `insert_template` | payload, at | **fresh sids/gids** (§2.6) |
+| `add_anchor` / `remove_anchor` | sid, period, edge / nid | |
+| `add_edge` / `edit_edge` / `remove_edge` | nid pair, label, style / index | |
+| `new_document` / `load_document` | — / dict | load reports pruned annotations |
+
+### 14.4 Change events
+
+The core emits `changed(scope)` after a successful command, with
+`scope ∈ {cells, structure, annotations, document}` (`structure` = anything affecting layout:
+add/remove/move/group/collapse/periods; `document` = wholesale replacement). The tkinter shell
+maps every event to `request_render()`; scopes exist so a future incremental renderer can
+repaint only dirty rows, and so non-UI observers (autosave, dirty-flag) can subscribe too.
+
+### 14.5 Undo / redo semantics
+
+Snapshot-based at the command boundary: capture `to_dict()` before applying, push on success.
+R5 guarantees gesture-level granularity (one brush stroke / one drag = one undo step).
+Transient shell state is never part of a snapshot.
+
+### 14.6 Why this protocol
+
+- **Headless testability** — commands + events are testable without a window (today only
+  `Model` is; gestures require a real Tk shell).
+- **Undo seam** — R4+R5 make snapshot undo trivial and correct.
+- **Second shell** — the §12 web/SVG reimplementation consumes the same catalog unchanged.
+- **VCD import & scripting** — an importer is just another command producer.
+
+## 15. Changelog
 
 Versioned to match the `retrowave.py` implementation. Newest first. When adding a feature or
 changing behaviour, bump the version in three places — the program string, this spec's header, and

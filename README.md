@@ -10,7 +10,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.29**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.30**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -37,6 +37,11 @@ templates, and export to PNG, SVG or EPS.
   clear *and clickable*, so you can try the gesture immediately). Skip ends it
   permanently; the last step has a "don't show again" checkbox. Reopen anytime via
   *Help → Interactive tutorial*.
+
+**Bilingual UI**
+- English and Traditional Chinese (繁體中文): *Help → Language*, applied on restart.
+  Translations live in plain string catalogs (`src/retrowave/locales/`), so adding a
+  language is just one more dict module.
 
 **Undo / Redo**
 - `Ctrl+Z` / `Ctrl+Y`, last **5 steps**. One gesture = one step: a whole brush stroke,

@@ -14,9 +14,11 @@ from .engine import Engine
 from .elements import WAVE_TYPES
 from .export import export_png, export_svg, export_wavedrom
 from .geometry import Geometry
+from .i18n import available_languages, get_language, set_language, tr
 from .templates import TemplateLibrary
 from .theme import Style
 from .tutorial import TutorialOverlay, tutorial_enabled
+from . import usersettings
 
 SHIFT_MASK = 0x0001
 CTRL_MASK = 0x0004
@@ -34,7 +36,8 @@ def make_key_button(parent, text, command, width=None):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"RetroWave - Digital Waveform Editor  v{__version__}")
+        set_language(usersettings.get_value("language", "en"))   # apply before building any UI text
+        self.title(tr("RetroWave - Digital Waveform Editor") + f"  v{__version__}")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.doc = Document(scheduler=self.after_idle)
@@ -76,33 +79,33 @@ class App(tk.Tk):
         toolbar = self.tool_btns["CLK"].master       # the whole element toolbar
         cfg = self.sp_p.master                       # the geometry/period spinbox area
         return [
-            (None, "Welcome to RetroWave",
-             "This is a retro-style digital timing / waveform editor.\n"
+            (None, tr("Welcome to RetroWave"),
+             tr("This is a retro-style digital timing / waveform editor.\n"
              "The next few steps walk you through the main operations - the highlighted area "
              "is what you can act on right now, so feel free to try it directly.\n\n"
-             "(Press Esc or \"Skip\" any time to end the tutorial.)"),
-            (toolbar, "Element Toolbar",
-             "Pick an element (or press number keys 1-6): CLK clock, H high level, L low level, "
+             "(Press Esc or \"Skip\" any time to end the tutorial.)")),
+            (toolbar, tr("Element Toolbar"),
+             tr("Pick an element (or press number keys 1-6): CLK clock, H high level, L low level, "
              "BUS data bus, HiZ high impedance, Unknown.\n"
              "\"+ Signal\" adds a new signal row. Once an element is selected you can draw "
-             "waveforms on the canvas to the right."),
-            (self.wave_cv, "Waveform Canvas",
-             "Click a cell to draw it; press and drag to brush along the same row (row-locked, no slips).\n"
+             "waveforms on the canvas to the right.")),
+            (self.wave_cv, tr("Waveform Canvas"),
+             tr("Click a cell to draw it; press and drag to brush along the same row (row-locked, no slips).\n"
              "Click a BUS cell again to enter its data value.\n"
              "Shift/Ctrl + drag = box-select (press an element key to fill the block, Ctrl+C/V to copy and paste).\n"
-             "Right-click to create an anchor; drag from one anchor to another to draw a measurement / relationship line."),
-            (self.name_cv, "Signal Name Column",
-             "Select signals (Ctrl/Shift for multi-select); right-click menu: color, offset, create group, rename, delete.\n"
+             "Right-click to create an anchor; drag from one anchor to another to draw a measurement / relationship line.")),
+            (self.name_cv, tr("Signal Name Column"),
+             tr("Select signals (Ctrl/Shift for multi-select); right-click menu: color, offset, create group, rename, delete.\n"
              "Press and drag a name up/down to reorder; drag into a group = merge in, drag to the empty space at the bottom = move out of the group.\n"
-             "Click a group header to collapse/expand the whole group."),
-            (cfg, "Geometry and Periods",
-             "Adjust cell width, row height, transition slope ratio and period count - the view updates instantly.\n"
-             "These are view settings and are saved together with the project JSON."),
-            (None, "A Few Last Tricks",
-             "Esc = pan mode (left-drag pans the canvas, no accidental drawing).\n"
+             "Click a group header to collapse/expand the whole group.")),
+            (cfg, tr("Geometry and Periods"),
+             tr("Adjust cell width, row height, transition slope ratio and period count - the view updates instantly.\n"
+             "These are view settings and are saved together with the project JSON.")),
+            (None, tr("A Few Last Tricks"),
+             tr("Esc = pan mode (left-drag pans the canvas, no accidental drawing).\n"
              "Ctrl+Z / Ctrl+Y = undo / redo (last 5 steps, one gesture counts as one step).\n"
              "The File menu lets you save (JSON) and export PNG/SVG/EPS and WaveDrom.\n"
-             "To see the tutorial again later: Help -> Interactive tutorial."),
+             "To see the tutorial again later: Help -> Interactive tutorial.")),
         ]
 
     @property
@@ -116,31 +119,37 @@ class App(tk.Tk):
 
     def _build_menubar(self):
         bar = tk.Frame(self, bg=Style.FACE, bd=1, relief=tk.RAISED); bar.pack(side=tk.TOP, fill=tk.X)
-        fmb = tk.Menubutton(bar, text="File", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
+        fmb = tk.Menubutton(bar, text=tr("File"), font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         fm = tk.Menu(fmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        fm.add_command(label="New\tCtrl+N", command=self.do_new)
-        fm.add_command(label="Load...\tCtrl+O", command=self.do_open)
-        fm.add_command(label="Save...\tCtrl+S", command=self.do_save)
+        fm.add_command(label=tr("New") + "\tCtrl+N", command=self.do_new)
+        fm.add_command(label=tr("Load...") + "\tCtrl+O", command=self.do_open)
+        fm.add_command(label=tr("Save...") + "\tCtrl+S", command=self.do_save)
         fm.add_separator()
-        fm.add_command(label="Import Template...", command=self._import_template)
+        fm.add_command(label=tr("Import Template..."), command=self._import_template)
         fm.add_separator()
-        fm.add_command(label="Export Image...\tCtrl+E", command=self.do_export)
-        fm.add_command(label="Export WaveDrom JSON...", command=self.do_export_wavedrom)
+        fm.add_command(label=tr("Export Image...") + "\tCtrl+E", command=self.do_export)
+        fm.add_command(label=tr("Export WaveDrom JSON..."), command=self.do_export_wavedrom)
         fm.add_separator()
-        fm.add_command(label="Exit", command=self.destroy)
+        fm.add_command(label=tr("Exit"), command=self.destroy)
         fmb.configure(menu=fm); fmb.pack(side=tk.LEFT)
 
-        tmb = tk.Menubutton(bar, text="Template", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
+        tmb = tk.Menubutton(bar, text=tr("Template"), font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         self.tmpl_menu = tk.Menu(tmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
         tmb.configure(menu=self.tmpl_menu); tmb.pack(side=tk.LEFT)
         self._rebuild_template_menu()
-        hmb = tk.Menubutton(bar, text="Help", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
+        hmb = tk.Menubutton(bar, text=tr("Help"), font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         hm = tk.Menu(hmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        hm.add_command(label="Interactive tutorial", command=lambda: self._maybe_show_tutorial(force=True))
-        hm.add_command(label="Usage", command=self.help_usage)
-        hm.add_command(label="Shortcuts", command=self.help_keys)
+        hm.add_command(label=tr("Interactive tutorial"), command=lambda: self._maybe_show_tutorial(force=True))
+        hm.add_command(label=tr("Usage"), command=self.help_usage)
+        hm.add_command(label=tr("Shortcuts"), command=self.help_keys)
         hm.add_separator()
-        hm.add_command(label="About RetroWave", command=self.help_about)
+        lang_menu = tk.Menu(hm, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
+        for code, label in available_languages().items():
+            mark = "* " if get_language() == code else "  "
+            lang_menu.add_command(label=mark + label, command=lambda c=code: self._set_language(c))
+        hm.add_cascade(label=tr("Language"), menu=lang_menu)
+        hm.add_separator()
+        hm.add_command(label=tr("About RetroWave"), command=self.help_about)
         hmb.configure(menu=hm); hmb.pack(side=tk.LEFT)
 
     # ---- Template library ----
@@ -155,45 +164,45 @@ class App(tk.Tk):
             for e in self.lib.entries:
                 rem.add_command(label=e["name"], command=lambda en=e: self._remove_template(en["name"]))
             self._tmpl_rem = rem               # keep a reference so it isn't garbage-collected
-            m.add_cascade(label="Remove Template", menu=rem)
+            m.add_cascade(label=tr("Remove Template"), menu=rem)
         else:
-            m.add_command(label="(No templates yet)", state="disabled")
+            m.add_command(label=tr("(No templates yet)"), state="disabled")
         m.add_separator()
-        m.add_command(label="Import Template...", command=self._import_template)
-        m.add_command(label="Save Current Canvas as Template...", command=self._save_as_template)
+        m.add_command(label=tr("Import Template..."), command=self._import_template)
+        m.add_command(label=tr("Save Current Canvas as Template..."), command=self._save_as_template)
 
     def _startup_templates(self):
         avail, missing = self.lib.load()
         self._rebuild_template_menu()
         if missing:
-            lines = "\n".join(f"- {m['name']}    ({m.get('path') or 'unknown path'})" for m in missing)
+            lines = "\n".join(f"- {m['name']}    ({m.get('path') or tr('unknown path')})" for m in missing)
             messagebox.showwarning(
-                "Template Loading", f"The following template files could not be found and were removed from the list:\n\n{lines}")
+                tr("Template Loading"), tr("The following template files could not be found and were removed from the list:\n\n{lines}").format(lines=lines))
 
     def _import_template(self):
         path = filedialog.askopenfilename(
-            title="Import Template (JSON)", filetypes=[("Waveform JSON", "*.json"), ("All Files", "*.*")])
+            title=tr("Import Template (JSON)"), filetypes=[(tr("Waveform JSON"), "*.json"), (tr("All Files"), "*.*")])
         if not path:
             return
         try:
             d = TemplateLibrary.read(path)
             if not isinstance(d, dict) or "signals" not in d:
-                raise ValueError("Not a valid waveform JSON (missing signals field)")
+                raise ValueError(tr("Not a valid waveform JSON (missing signals field)"))
         except Exception as ex:
-            messagebox.showerror("Import Template Failed", str(ex)); return
+            messagebox.showerror(tr("Import Template Failed"), str(ex)); return
         default = os.path.splitext(os.path.basename(path))[0]
-        name = simpledialog.askstring("Import Template", "Template name:", initialvalue=default, parent=self)
+        name = simpledialog.askstring(tr("Import Template"), tr("Template name:"), initialvalue=default, parent=self)
         if not name:
             return
         self.lib.add(name, path); self._rebuild_template_menu()
-        messagebox.showinfo("Import Template",
-                            f"Template \"{name}\" added.\n(This template loads automatically every time "
-                            f"the tool opens; pick it from the Template menu to insert it as a group.)")
+        messagebox.showinfo(tr("Import Template"),
+                            tr("Template \"{name}\" added.\n(This template loads automatically every time "
+                            "the tool opens; pick it from the Template menu to insert it as a group.)").format(name=name))
 
     def _save_as_template(self):
         path = filedialog.asksaveasfilename(
-            title="Save Current Canvas as Template", defaultextension=".json",
-            initialdir=TemplateLibrary.DIR, filetypes=[("Waveform JSON", "*.json")])
+            title=tr("Save Current Canvas as Template"), defaultextension=".json",
+            initialdir=TemplateLibrary.DIR, filetypes=[(tr("Waveform JSON"), "*.json")])
         if not path:
             return
         data = self.model.to_dict(); data["view"] = self.geom.to_dict()
@@ -202,47 +211,47 @@ class App(tk.Tk):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:
-            messagebox.showerror("Save as Template Failed", str(ex)); return
+            messagebox.showerror(tr("Save as Template Failed"), str(ex)); return
         default = os.path.splitext(os.path.basename(path))[0]
-        name = simpledialog.askstring("Save as Template", "Template name:", initialvalue=default, parent=self)
+        name = simpledialog.askstring(tr("Save as Template"), tr("Template name:"), initialvalue=default, parent=self)
         if not name:
             return
         self.lib.add(name, path); self._rebuild_template_menu()
-        messagebox.showinfo("Template", f"Saved as template \"{name}\".")
+        messagebox.showinfo(tr("Template"), tr("Saved as template \"{name}\".").format(name=name))
 
     def _remove_template(self, name):
         self.lib.remove(name); self._rebuild_template_menu()
-        self.status.configure(text=f" Removed \"{name}\" from the template library (the original file is unaffected)")
+        self.status.configure(text=tr(" Removed \"{name}\" from the template library (the original file is unaffected)").format(name=name))
 
     def _insert_template(self, entry):
         try:
             tsignals = TemplateLibrary.read(entry["path"]).get("signals", [])
         except Exception as ex:
-            messagebox.showerror("Insert Template Failed",
-                                 f"Read failed; the file may have been moved or deleted.\n{entry.get('path')}\n\n{ex}")
+            messagebox.showerror(tr("Insert Template Failed"),
+                                 tr("Read failed; the file may have been moved or deleted.\n{path}\n\n{ex}").format(path=entry.get('path'), ex=ex))
             return
         if not tsignals:
-            messagebox.showwarning("Insert Template", "This template has no signals."); return
+            messagebox.showwarning(tr("Insert Template"), tr("This template has no signals.")); return
         gname, newidx = self.doc.insert_template(entry["name"], tsignals)
         self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
         self.request_render()
-        self.status.configure(text=f" Inserted template \"{gname}\" ({len(newidx)} signals, grouped)")
+        self.status.configure(text=tr(" Inserted template \"{gname}\" ({n} signals, grouped)").format(gname=gname, n=len(newidx)))
 
     def _build_toolbar(self):
         tb = tk.Frame(self, bg=Style.FACE, bd=1, relief=tk.RAISED); tb.pack(side=tk.TOP, fill=tk.X)
         cfg = tk.Frame(tb, bg=Style.FACE); cfg.pack(side=tk.RIGHT, padx=6, pady=4)
-        self.sp_w = self._spin(cfg, "Width", 30, 240, 4, self.geom.period_w, self._apply_geom)
-        self.sp_h = self._spin(cfg, "Row H", 36, 160, 4, self.geom.row_h, self._apply_geom)
-        self.sp_r = self._spin(cfg, "Slope%", 5, 45, 1, int(self.geom.ramp_ratio * 100), self._apply_geom)
-        self.sp_p = self._spin(cfg, "Periods", 1, 256, 1, self.model.n_periods, self._apply_periods)
+        self.sp_w = self._spin(cfg, tr("Width"), 30, 240, 4, self.geom.period_w, self._apply_geom)
+        self.sp_h = self._spin(cfg, tr("Row H"), 36, 160, 4, self.geom.row_h, self._apply_geom)
+        self.sp_r = self._spin(cfg, tr("Slope%"), 5, 45, 1, int(self.geom.ramp_ratio * 100), self._apply_geom)
+        self.sp_p = self._spin(cfg, tr("Periods"), 1, 256, 1, self.model.n_periods, self._apply_periods)
 
-        tk.Label(tb, text="Element:", bg=Style.FACE, font=Style.UI_FONT).pack(side=tk.LEFT, padx=(6, 2), pady=6)
+        tk.Label(tb, text=tr("Element:"), bg=Style.FACE, font=Style.UI_FONT).pack(side=tk.LEFT, padx=(6, 2), pady=6)
         for t in WAVE_TYPES:
             b = make_key_button(tb, t, lambda x=t: self._set_tool(x))
             b.pack(side=tk.LEFT, padx=2, pady=6); self.tool_btns[t] = b
         tk.Frame(tb, width=2, bg=Style.FACE_DARK).pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=8)
-        make_key_button(tb, "+ Signal", self.add_signal).pack(side=tk.LEFT, padx=2, pady=6)
-        tk.Label(tb, text="(right-click a signal for actions)", bg=Style.FACE,
+        make_key_button(tb, tr("+ Signal"), self.add_signal).pack(side=tk.LEFT, padx=2, pady=6)
+        tk.Label(tb, text=tr("(right-click a signal for actions)"), bg=Style.FACE,
                  font=Style.UI_FONT, fg="#777").pack(side=tk.LEFT, padx=(8, 2), pady=6)
 
     def _spin(self, parent, label, lo, hi, step, val, cmd):
@@ -278,7 +287,7 @@ class App(tk.Tk):
         if not self.model.signals:
             return
         cur = self.model.signals[self.selected].get("offset", 0.0)
-        v = simpledialog.askfloat("Set Offset", "Offset (0 ~ 0.95 of a period):",
+        v = simpledialog.askfloat(tr("Set Offset"), tr("Offset (0 ~ 0.95 of a period):"),
                                   initialvalue=cur, minvalue=0.0, maxvalue=0.95, parent=self)
         if v is None:
             return
@@ -388,7 +397,7 @@ class App(tk.Tk):
     def _fill_rect(self, sel, t):
         s0, s1, p0, p1 = sel
         if t == "BUS":
-            txt = simpledialog.askstring("Fill BUS", "Data value for this range:", parent=self)
+            txt = simpledialog.askstring(tr("Fill BUS"), tr("Data value for this range:"), parent=self)
             if txt is None:
                 return None
             payload = ("BUS", txt)
@@ -401,28 +410,29 @@ class App(tk.Tk):
             for p in range(p0, p1 + 1):
                 self.doc.set_cell(s, p, payload[0], payload[1])
         self.doc.commit()
-        return f"Filled {payload[0]}" + (f" = '{payload[1]}'" if payload[0] == "BUS" else "")
+        return tr("Filled {t}").format(t=payload[0]) + (f" = '{payload[1]}'" if payload[0] == "BUS" else "")
 
     def _fill_selection(self, t):
         if self.cell_sel is None:
             return
         msg = self._fill_rect(self.cell_sel, t)
         if msg:
-            self.request_render(); self.status.configure(text=" " + msg + " (selection kept, Esc to clear)")
+            self.request_render(); self.status.configure(text=" " + msg + tr(" (selection kept, Esc to clear)"))
 
     def _update_status(self):
         if self.active_tool is None:
             self.status.configure(
-                text=f" Pan mode | Left-drag = pan canvas | Shift/Ctrl+left-drag = box-select "
-                     f"| Click an element button or number key to draw | Periods {self.model.n_periods}")
+                text=tr(" Pan mode | Left-drag = pan canvas | Shift/Ctrl+left-drag = box-select "
+                     "| Click an element button or number key to draw | Periods {n}").format(n=self.model.n_periods))
             return
         if self.active_tool == "BUS":
-            hint = "Click/drag = draw BUS (existing BUS kept, non-BUS replaced); click same cell again = edit value"
+            hint = tr("Click/drag = draw BUS (existing BUS kept, non-BUS replaced); click same cell again = edit value")
         else:
-            hint = "Click/drag to paint (row-locked)"
+            hint = tr("Click/drag to paint (row-locked)")
         self.status.configure(
-            text=f" Brush: {self.active_tool} | {hint} | Shift/Ctrl drag = box-select (press element key to fill / Ctrl+C to copy) "
-                 f"| Name Ctrl/Shift multi-select -> right-click: color/offset/delete | Esc = pan mode | Periods {self.model.n_periods}")
+            text=tr(" Brush: {tool} | {hint} | Shift/Ctrl drag = box-select (press element key to fill / Ctrl+C to copy) "
+                 "| Name Ctrl/Shift multi-select -> right-click: color/offset/delete | Esc = pan mode | Periods {n}").format(
+                 tool=self.active_tool, hint=hint, n=self.model.n_periods))
 
     def request_render(self):
         """Coalesced redraw: multiple requests within the same event-loop cycle redraw only once at idle.
@@ -641,9 +651,9 @@ class App(tk.Tk):
             self._connecting = False; self._connect_from = None; self._connect_xy = None
             self._hover_node = None
             if target and target != frm:
-                label = simpledialog.askstring("Relationship Line", "Label (optional, e.g. t_su):", parent=self) or ""
+                label = simpledialog.askstring(tr("Relationship Line"), tr("Label (optional, e.g. t_su):"), parent=self) or ""
                 self.doc.add_edge(frm, target, label)
-                self.status.configure(text=f" Created relationship line {frm} -> {target}")
+                self.status.configure(text=tr(" Created relationship line {frm} -> {to}").format(frm=frm, to=target))
             self.request_render(); return
         if self._selecting:
             a = self._cell_from_xy(*self._press_xy, clamp=True)
@@ -654,7 +664,7 @@ class App(tk.Tk):
                 self._copy_ctx = "cells"
             self._erase_marquee(); self.request_render()
             if self.cell_sel:
-                self.status.configure(text=" Box-selected; press an element key to fill, or Ctrl+C to copy")
+                self.status.configure(text=tr(" Box-selected; press an element key to fill, or Ctrl+C to copy"))
         else:
             if not self._moved and self._press:
                 self._click_cell(*self._press)
@@ -666,27 +676,27 @@ class App(tk.Tk):
         m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
         nid = self._node_at_xy(cx, cy)
         if nid:
-            m.add_command(label=f"Delete anchor {nid}", command=lambda: self._del_node(nid))
+            m.add_command(label=tr("Delete anchor {nid}").format(nid=nid), command=lambda: self._del_node(nid))
         else:
             ei = self._edge_at_xy(cx, cy)
             if ei is not None:
-                m.add_command(label="Edit label...", command=lambda: self._edit_edge(ei))
+                m.add_command(label=tr("Edit label..."), command=lambda: self._edit_edge(ei))
                 sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
                 cur = self.model.edges[ei].get("style", "double")
-                for sty, lab in (("double", "Double arrow (measurement)"),
-                                 ("single", "Single arrow (causal)"),
-                                 ("measure", "No arrow (measurement line)")):
+                for sty, lab in (("double", tr("Double arrow (measurement)")),
+                                 ("single", tr("Single arrow (causal)")),
+                                 ("measure", tr("No arrow (measurement line)"))):
                     mark = "* " if sty == cur else "o "
                     sub.add_command(label=mark + lab, command=lambda s=sty: self._set_edge_style(ei, s))
-                m.add_cascade(label="Arrow style", menu=sub)
-                m.add_command(label="Delete relationship line", command=lambda: self._del_edge(ei))
+                m.add_cascade(label=tr("Arrow style"), menu=sub)
+                m.add_command(label=tr("Delete relationship line"), command=lambda: self._del_edge(ei))
             else:
                 c = self._cell_from_xy(cx, cy)
                 if not c:
                     return
-                m.add_command(label="Create anchor here", command=lambda: self._add_node_at(cx, cy))
+                m.add_command(label=tr("Create anchor here"), command=lambda: self._add_node_at(cx, cy))
                 m.add_separator()
-                m.add_command(label="Clear to L",
+                m.add_command(label=tr("Clear to L"),
                               command=lambda cc=c: (self.doc.set_cell(cc[0], cc[1], "L"), self.request_render()))
         try:
             m.tk_popup(e.x_root, e.y_root)
@@ -709,30 +719,31 @@ class App(tk.Tk):
             return
         si, p, edge = ce
         nid = self.doc.add_anchor(self.model.signals[si].get("sid"), p, edge)
-        self.request_render(); self.status.configure(text=f" Created anchor {nid} (drag an anchor to draw a relationship line; Del to delete)")
+        self.request_render(); self.status.configure(text=tr(" Created anchor {nid} (drag an anchor to draw a relationship line; Del to delete)").format(nid=nid))
 
     def _del_node(self, nid):
         self.doc.remove_anchor(nid)
         if self._hover_node == nid:
             self._hover_node = None
-        self.request_render(); self.status.configure(text=f" Deleted anchor {nid}")
+        self.request_render(); self.status.configure(text=tr(" Deleted anchor {nid}").format(nid=nid))
 
     def _edit_edge(self, i):
         if 0 <= i < len(self.model.edges):
             cur = self.model.edges[i].get("label", "")
-            new = simpledialog.askstring("Relationship Line Label", "Label:", initialvalue=cur, parent=self)
+            new = simpledialog.askstring(tr("Relationship Line Label"), tr("Label:"), initialvalue=cur, parent=self)
             if new is not None:
                 self.doc.set_edge_label(i, new); self.request_render()
 
     def _del_edge(self, i):
         if self.doc.remove_edge(i):
             self._hover_edge = None
-            self.request_render(); self.status.configure(text=" Deleted relationship line")
+            self.request_render(); self.status.configure(text=tr(" Deleted relationship line"))
 
     def _set_edge_style(self, i, style):
         if self.doc.set_edge_style(i, style):
             self.request_render()
-            self.status.configure(text=f" Relationship line style: { {'double':'double arrow','single':'single arrow (causal)','measure':'no-arrow measurement'}[style] }")
+            self.status.configure(text=tr(" Relationship line style: {label}").format(
+                label={'double': tr('double arrow'), 'single': tr('single arrow (causal)'), 'measure': tr('no-arrow measurement')}[style]))
 
     def _del_hovered_annot(self):
         if self._is_typing():
@@ -764,7 +775,7 @@ class App(tk.Tk):
         cells = self.model.signals[s]["cells"]
         if t == "BUS" and cells[p]["type"] == "BUS":     # already BUS -> edit value
             cur = cells[p].get("text", "")
-            new = simpledialog.askstring("BUS Data", "Enter data value:", initialvalue=cur, parent=self)
+            new = simpledialog.askstring(tr("BUS Data"), tr("Enter data value:"), initialvalue=cur, parent=self)
             if new is not None:
                 self.doc.set_cell(s, p, "BUS", new)
         else:
@@ -784,14 +795,14 @@ class App(tk.Tk):
                 return
             self.clip_signals = [self._copy_signal(self.model.signals[i]) for i in idxs]
             self._clip_kind = "signals"
-            self.status.configure(text=f" Copied {len(idxs)} signals; Ctrl+V pastes after the selected row")
+            self.status.configure(text=tr(" Copied {n} signals; Ctrl+V pastes after the selected row").format(n=len(idxs)))
         elif self.cell_sel is not None:
             s0, s1, p0, p1 = self.cell_sel
             self.clip = [[{"type": self.model.signals[s]["cells"][p]["type"],
                            "text": self.model.signals[s]["cells"][p].get("text", "")}
                           for p in range(p0, p1 + 1)] for s in range(s0, s1 + 1)]
             self._clip_kind = "cells"
-            self.status.configure(text=f" Copied {s1-s0+1}x{p1-p0+1} waveform; move to the target cell and Ctrl+V to paste")
+            self.status.configure(text=tr(" Copied {rows}x{cols} waveform; move to the target cell and Ctrl+V to paste").format(rows=s1-s0+1, cols=p1-p0+1))
 
     def do_paste(self):
         if self._clip_kind == "group" and self.clip_group:
@@ -803,7 +814,7 @@ class App(tk.Tk):
             self.selected = newidx[0]
             self.sig_sel = set(newidx); self._sig_anchor = newidx[0]
             self._refresh_offset_field(); self.request_render()
-            self.status.configure(text=f" Pasted {len(self.clip_signals)} signals (copies are ungrouped)")
+            self.status.configure(text=tr(" Pasted {n} signals (copies are ungrouped)").format(n=len(self.clip_signals)))
         elif self._clip_kind == "cells" and self.clip:
             s0, p0 = self._hover or (self.selected, 0)
             self.doc.begin()                     # one paste = one undo unit
@@ -813,7 +824,7 @@ class App(tk.Tk):
                 for dp, c in enumerate(row):
                     self.doc.set_cell(s0 + ds, p0 + dp, c["type"], c.get("text", ""))
             self.doc.commit()
-            self.request_render(); self.status.configure(text=f" Pasted waveform at signal {s0} T{p0}")
+            self.request_render(); self.status.configure(text=tr(" Pasted waveform at signal {s} T{p}").format(s=s0, p=p0))
 
     # ---- Color ----
     def pick_color(self):
@@ -821,7 +832,7 @@ class App(tk.Tk):
             return
         init = self.model.signals[self.selected].get("color") or Style.WAVE
         try:
-            _, hx = colorchooser.askcolor(color=init, parent=self, title="Signal Color")
+            _, hx = colorchooser.askcolor(color=init, parent=self, title=tr("Signal Color"))
         except Exception:
             hx = None
         if hx:
@@ -877,12 +888,12 @@ class App(tk.Tk):
                     self.sig_sel = {i for i, s in enumerate(self.model.signals) if s["sid"] == sid}
                     self.selected = next(iter(self.sig_sel), self.selected)
                     self._sig_anchor = self.selected
-                    self.status.configure(text=" Moved signal" +
-                                          (" (merged into group)" if tgt["container"] else " (moved to top level)"))
+                    self.status.configure(text=tr(" Moved signal") +
+                                          (tr(" (merged into group)") if tgt["container"] else tr(" (moved to top level)")))
                 else:
                     self.doc.move_group_to(self._drag_ref, tgt["container"], tgt["index"])
-                    self.status.configure(text=" Moved group" +
-                                          (" (nested as a subgroup)" if tgt["container"] else " (top level)"))
+                    self.status.configure(text=tr(" Moved group") +
+                                          (tr(" (nested as a subgroup)") if tgt["container"] else tr(" (top level)")))
             self._dragging = False; self._drop = None; self._drop_target = None
             self._name_press = None
             self._refresh_offset_field(); self.request_render()
@@ -1018,25 +1029,25 @@ class App(tk.Tk):
         if item[0] == "group":              # ---- group header menu ----
             gid = item[1]; meta = self.model.groups.get(gid, {})
             m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-            m.add_command(label=("Expand" if meta.get("collapsed") else "Collapse"),
+            m.add_command(label=(tr("Expand") if meta.get("collapsed") else tr("Collapse")),
                           command=lambda: self._toggle_group(gid))
-            m.add_command(label="Group color...", command=lambda: self._color_group(gid))
-            m.add_command(label="Set group offset...", command=lambda: self._offset_group(gid))
-            m.add_command(label="Rename group...", command=lambda: self._rename_group(gid))
+            m.add_command(label=tr("Group color..."), command=lambda: self._color_group(gid))
+            m.add_command(label=tr("Set group offset..."), command=lambda: self._offset_group(gid))
+            m.add_command(label=tr("Rename group..."), command=lambda: self._rename_group(gid))
             others = [g for g in self.model.groups if g != gid]
             if others:
                 sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
                 for g in others:
                     sub.add_command(label=self.model.groups[g].get("name", g),
                                     command=lambda t=g: self._merge_group_into(gid, t))
-                m.add_cascade(label="Merge into group", menu=sub)
+                m.add_cascade(label=tr("Merge into group"), menu=sub)
             m.add_separator()
-            m.add_command(label="Copy group", command=lambda: self._copy_group(gid))
+            m.add_command(label=tr("Copy group"), command=lambda: self._copy_group(gid))
             if self.clip_group:
-                m.add_command(label="Paste group", command=self._paste_group)
+                m.add_command(label=tr("Paste group"), command=self._paste_group)
             m.add_separator()
-            m.add_command(label="Dissolve group (keep members)", command=lambda: self._dissolve_group(gid))
-            m.add_command(label="Delete group (with members)", command=lambda: self._delete_group(gid))
+            m.add_command(label=tr("Dissolve group (keep members)"), command=lambda: self._dissolve_group(gid))
+            m.add_command(label=tr("Delete group (with members)"), command=lambda: self._delete_group(gid))
             try:
                 m.tk_popup(e.x_root, e.y_root)
             finally:
@@ -1048,27 +1059,27 @@ class App(tk.Tk):
             self.request_render()
         self._copy_ctx = "signals"
         n = len(self.sig_sel)
-        scope = f" ({n} signals)" if n > 1 else ""
+        scope = tr(" ({n} signals)").format(n=n) if n > 1 else ""
         grouped = any(self.model.signals[i].get("group") for i in self.sig_sel
                       if 0 <= i < len(self.model.signals))
         m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        m.add_command(label=f"Color...{scope}", command=self.pick_color)
-        m.add_command(label=f"Clear color{scope}", command=self.clear_color)
+        m.add_command(label=tr("Color...") + scope, command=self.pick_color)
+        m.add_command(label=tr("Clear color") + scope, command=self.clear_color)
         m.add_separator()
-        m.add_command(label=f"Set offset...{scope}", command=self.set_offset_dialog)
+        m.add_command(label=tr("Set offset...") + scope, command=self.set_offset_dialog)
         m.add_separator()
-        m.add_command(label=f"Create new group...{scope}", command=self.group_selected)
+        m.add_command(label=tr("Create new group...") + scope, command=self.group_selected)
         if self.model.groups:
             sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
             for g, me in self.model.groups.items():
                 sub.add_command(label=me.get("name", g),
                                 command=lambda t=g: self._merge_selected_into(t))
-            m.add_cascade(label=f"Merge into group{scope}", menu=sub)
+            m.add_cascade(label=tr("Merge into group") + scope, menu=sub)
         if grouped:
-            m.add_command(label=f"Remove from group{scope}", command=self._remove_from_group)
+            m.add_command(label=tr("Remove from group") + scope, command=self._remove_from_group)
         m.add_separator()
-        m.add_command(label="Rename...", command=lambda: self._rename_signal(s))
-        m.add_command(label=f"Delete signal{scope}", command=self.del_signal)
+        m.add_command(label=tr("Rename..."), command=lambda: self._rename_signal(s))
+        m.add_command(label=tr("Delete signal") + scope, command=self.del_signal)
         try:
             m.tk_popup(e.x_root, e.y_root)
         finally:
@@ -1076,7 +1087,7 @@ class App(tk.Tk):
 
     def _rename_signal(self, s):
         if 0 <= s < len(self.model.signals):
-            new = simpledialog.askstring("Rename", "Signal name:",
+            new = simpledialog.askstring(tr("Rename"), tr("Signal name:"),
                                          initialvalue=self.model.signals[s]["name"], parent=self)
             if new:
                 self.doc.rename_signal(s, new); self.request_render()
@@ -1096,7 +1107,7 @@ class App(tk.Tk):
                       if 0 <= i < len(self.model.signals))
         if not idxs:
             return
-        name = simpledialog.askstring("Create New Group", "Group name:", initialvalue="Group", parent=self)
+        name = simpledialog.askstring(tr("Create New Group"), tr("Group name:"), initialvalue=tr("Group"), parent=self)
         if name is None:
             return
         sids = {self.model.signals[i]["sid"] for i in idxs}
@@ -1106,7 +1117,7 @@ class App(tk.Tk):
             self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
             self.request_render()
             nm = self.model.groups.get(gid, {}).get("name", gid)
-            self.status.configure(text=f" Created group \"{nm}\" ({len(newidx)} signals); click the header to collapse")
+            self.status.configure(text=tr(" Created group \"{nm}\" ({n} signals); click the header to collapse").format(nm=nm, n=len(newidx)))
 
     def _merge_selected_into(self, target_gid):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
@@ -1119,35 +1130,35 @@ class App(tk.Tk):
         newpos = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
         self.sig_sel = set(newpos); self.selected = newpos[0]; self._sig_anchor = newpos[0]
         self.request_render()
-        self.status.configure(text=f" Merged into group \"{nm}\" ({len(newpos)} signals)")
+        self.status.configure(text=tr(" Merged into group \"{nm}\" ({n} signals)").format(nm=nm, n=len(newpos)))
 
     def _merge_group_into(self, src_gid, target_gid):
         res = self.doc.merge_groups(src_gid, target_gid)
         if res:
             self.request_render()
             self.status.configure(
-                text=f" Nested the group into \"{self.model.groups.get(target_gid, {}).get('name', target_gid)}\"")
+                text=tr(" Nested the group into \"{nm}\"").format(nm=self.model.groups.get(target_gid, {}).get('name', target_gid)))
         else:
-            self.status.configure(text=" Cannot merge (cannot move into its own subgroup)")
+            self.status.configure(text=tr(" Cannot merge (cannot move into its own subgroup)"))
 
     def _remove_from_group(self):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
                       if 0 <= i < len(self.model.signals))
         moved = self.doc.remove_from_group(idxs)
         self.request_render()
-        self.status.configure(text=(f" Removed {moved} signals (color reset to default)" if moved
-                                    else " The selected signals are not in any group"))
+        self.status.configure(text=(tr(" Removed {n} signals (color reset to default)").format(n=moved) if moved
+                                    else tr(" The selected signals are not in any group")))
 
     def _dissolve_group(self, gid):
         self.doc.ungroup([gid])             # dissolve: children move up one level (nested subgroups kept)
         self.request_render()
-        self.status.configure(text=" Group dissolved (members/subgroups kept, promoted one level)")
+        self.status.configure(text=tr(" Group dissolved (members/subgroups kept, promoted one level)"))
 
     def _delete_group(self, gid):
         nm = self.model.groups.get(gid, {}).get("name", gid)
         n = len(self.doc.group_member_indices(gid))
-        if not messagebox.askyesno("Delete Group",
-                                   f"Delete group \"{nm}\" and its {n} signals?"):
+        if not messagebox.askyesno(tr("Delete Group"),
+                                   tr("Delete group \"{nm}\" and its {n} signals?").format(nm=nm, n=n)):
             return
         self.doc.delete_group(gid)
         if self.model.signals:
@@ -1157,20 +1168,20 @@ class App(tk.Tk):
             self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
         self.cell_sel = None; self._hover_node = None; self._hover_edge = None
         self.request_render()
-        self.status.configure(text=f" Deleted group \"{nm}\" and {n} signals")
+        self.status.configure(text=tr(" Deleted group \"{nm}\" and {n} signals").format(nm=nm, n=n))
 
     def _offset_group(self, gid):
         members = self.doc.group_member_indices(gid)
         if not members:
             return
         cur = self.model.signals[members[0]].get("offset", 0.0)
-        v = simpledialog.askfloat("Group Offset", "Offset (0 ~ 0.95, applied to the whole group including subgroups):",
+        v = simpledialog.askfloat(tr("Group Offset"), tr("Offset (0 ~ 0.95, applied to the whole group including subgroups):"),
                                   initialvalue=cur, minvalue=0.0, maxvalue=0.95, parent=self)
         if v is None:
             return
         self.doc.set_offset(members, v)
         self.request_render()
-        self.status.configure(text=f" Group offset set to {round(v,2)} for the whole group ({len(members)} signals)")
+        self.status.configure(text=tr(" Group offset set to {v} for the whole group ({n} signals)").format(v=round(v,2), n=len(members)))
 
     def _copy_group(self, gid):
         meta = self.model.groups.get(gid, {})
@@ -1181,7 +1192,7 @@ class App(tk.Tk):
         self.clip_group = {"name": meta.get("name", gid), "color": meta.get("color"),
                            "signals": members}
         self._clip_kind = "group"
-        self.status.configure(text=f" Copied group \"{self.clip_group['name']}\" ({len(members)} signals); Ctrl+V to paste")
+        self.status.configure(text=tr(" Copied group \"{nm}\" ({n} signals); Ctrl+V to paste").format(nm=self.clip_group['name'], n=len(members)))
 
     def _paste_group(self):
         res = self.doc.paste_group(self.clip_group)
@@ -1190,7 +1201,7 @@ class App(tk.Tk):
         gname, newidx = res
         self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
         self.request_render()
-        self.status.configure(text=f" Pasted group \"{gname}\" ({len(newidx)} signals, new group at the bottom)")
+        self.status.configure(text=tr(" Pasted group \"{gname}\" ({n} signals, new group at the bottom)").format(gname=gname, n=len(newidx)))
 
     def _toggle_group(self, gid):
         if self.doc.toggle_group(gid) is not None:
@@ -1199,7 +1210,7 @@ class App(tk.Tk):
     def _rename_group(self, gid):
         meta = self.model.groups.get(gid)
         if meta:
-            new = simpledialog.askstring("Rename Group", "Group name:",
+            new = simpledialog.askstring(tr("Rename Group"), tr("Group name:"),
                                          initialvalue=meta.get("name", gid), parent=self)
             if new:
                 self.doc.rename_group(gid, new); self.request_render()
@@ -1210,7 +1221,7 @@ class App(tk.Tk):
             return
         try:
             _, hx = colorchooser.askcolor(color=meta.get("color") or Style.WAVE,
-                                          parent=self, title="Group Color")
+                                          parent=self, title=tr("Group Color"))
         except Exception:
             hx = None
         if hx:
@@ -1229,7 +1240,7 @@ class App(tk.Tk):
         if not targets:
             return
         if len(targets) > 1 and not messagebox.askyesno(
-                "Delete Signals", f"Delete the {len(targets)} selected signals?"):
+                tr("Delete Signals"), tr("Delete the {n} selected signals?").format(n=len(targets))):
             return
         self.doc.remove_signals(targets)
         if self.model.signals:
@@ -1244,17 +1255,17 @@ class App(tk.Tk):
         if self._is_typing():
             return
         if self.doc.undo():
-            self._after_history_jump("Undone")
+            self._after_history_jump(tr("Undone"))
         else:
-            self.status.configure(text=" Nothing to undo")
+            self.status.configure(text=tr(" Nothing to undo"))
 
     def do_redo(self):
         if self._is_typing():
             return
         if self.doc.redo():
-            self._after_history_jump("Redone")
+            self._after_history_jump(tr("Redone"))
         else:
-            self.status.configure(text=" Nothing to redo")
+            self.status.configure(text=tr(" Nothing to redo"))
 
     def _after_history_jump(self, verb):
         """After undo/redo the document is fully replaced: clamp the selection and clear transients pointing to old content."""
@@ -1268,10 +1279,10 @@ class App(tk.Tk):
         self.request_render()
         u, r = self.doc.history()
         self.status.configure(
-            text=f" {verb} (undo {u}/{self.doc.UNDO_DEPTH}, redo {r})")
+            text=tr(" {verb} (undo {u}/{depth}, redo {r})").format(verb=verb, u=u, depth=self.doc.UNDO_DEPTH, r=r))
 
     def do_new(self):
-        if messagebox.askyesno("New", "Clear the current content and start a new document?"):
+        if messagebox.askyesno(tr("New"), tr("Clear the current content and start a new document?")):
             self.doc.new_document()
             self.selected = 0; self.sig_sel = {0}; self._sig_anchor = 0
             self.cell_sel = None; self.clip = None
@@ -1280,16 +1291,16 @@ class App(tk.Tk):
 
     def do_save(self):
         path = filedialog.asksaveasfilename(defaultextension=".json",
-                filetypes=[("Waveform JSON", "*.json"), ("All Files", "*.*")])
+                filetypes=[(tr("Waveform JSON"), "*.json"), (tr("All Files"), "*.*")])
         if not path:
             return
         data = self.model.to_dict(); data["view"] = self.geom.to_dict()
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        messagebox.showinfo("Save", f"Saved:\n{path}")
+        messagebox.showinfo(tr("Save"), tr("Saved:\n{path}").format(path=path))
 
     def do_open(self):
-        path = filedialog.askopenfilename(filetypes=[("Waveform JSON", "*.json"), ("All Files", "*.*")])
+        path = filedialog.askopenfilename(filetypes=[(tr("Waveform JSON"), "*.json"), (tr("All Files"), "*.*")])
         if not path:
             return
         try:
@@ -1309,14 +1320,14 @@ class App(tk.Tk):
             cn, ce = cleared or (0, 0)
             if cn or ce:
                 self.status.configure(
-                    text=f" Opened; detected unmappable annotations, removed {cn} anchors and {ce} relationship lines")
+                    text=tr(" Opened; detected unmappable annotations, removed {cn} anchors and {ce} relationship lines").format(cn=cn, ce=ce))
         except Exception as ex:
-            messagebox.showerror("Open Failed", str(ex))
+            messagebox.showerror(tr("Open Failed"), str(ex))
 
     def do_export(self):
         path = filedialog.asksaveasfilename(defaultextension=".png",
-                filetypes=[("PNG Image", "*.png"), ("SVG Vector", "*.svg"),
-                           ("EPS Vector", "*.eps"), ("PostScript", "*.ps")])
+                filetypes=[(tr("PNG Image"), "*.png"), (tr("SVG Vector"), "*.svg"),
+                           (tr("EPS Vector"), "*.eps"), (tr("PostScript"), "*.ps")])
         if not path:
             return
         rows = self.model.layout()
@@ -1325,53 +1336,90 @@ class App(tk.Tk):
         wave_w = self.model.n_periods * self.geom.period_w + max_off * self.geom.period_w
         lo = path.lower()
         if lo.endswith(".png"):
-            scale = simpledialog.askinteger("PNG Resolution", "Scale (1~4, higher = sharper):",
+            scale = simpledialog.askinteger(tr("PNG Resolution"), tr("Scale (1~4, higher = sharper):"),
                                             initialvalue=2, minvalue=1, maxvalue=4, parent=self)
             if scale is None:
                 return
             try:
                 export_png(self.model, self.geom, path, scale)
-                messagebox.showinfo("Export", f"Exported PNG ({scale}x resolution):\n{path}")
+                messagebox.showinfo(tr("Export"), tr("Exported PNG ({scale}x resolution):\n{path}").format(scale=scale, path=path))
             except ImportError:
-                messagebox.showwarning("Export",
-                    "PNG export only needs Pillow (Ghostscript not required).\nPlease install it first:\n  pip install pillow")
+                messagebox.showwarning(tr("Export"),
+                    tr("PNG export only needs Pillow (Ghostscript not required).\nPlease install it first:\n  pip install pillow"))
             except Exception as ex:
-                messagebox.showerror("Export Failed", str(ex))
+                messagebox.showerror(tr("Export Failed"), str(ex))
         elif lo.endswith(".svg"):
             try:
                 export_svg(self.model, self.geom, path)
-                messagebox.showinfo("Export", f"Exported SVG (vector, infinitely scalable):\n{path}")
+                messagebox.showinfo(tr("Export"), tr("Exported SVG (vector, infinitely scalable):\n{path}").format(path=path))
             except Exception as ex:
-                messagebox.showerror("Export Failed", str(ex))
+                messagebox.showerror(tr("Export Failed"), str(ex))
         else:                                   # EPS / PS: built into tkinter, no extra packages needed
             sel = self.cell_sel; self.cell_sel = None; self.render()   # postscript snapshots the canvas directly, requires a synchronous redraw
             self.wave_cv.postscript(file=path, colormode="color",
                                     x=0, y=0, width=wave_w, height=total_h)
             self.cell_sel = sel; self.render()
-            messagebox.showinfo("Export", f"Exported:\n{path}")
+            messagebox.showinfo(tr("Export"), tr("Exported:\n{path}").format(path=path))
 
 
 
     # ---- WaveDrom export (interchange format; color / uniform-slope visuals are not preserved, nodes/edges carry over) ----
     def do_export_wavedrom(self):
         path = filedialog.asksaveasfilename(
-            title="Export WaveDrom JSON", defaultextension=".json",
-            filetypes=[("WaveDrom JSON", "*.json"), ("All Files", "*.*")])
+            title=tr("Export WaveDrom JSON"), defaultextension=".json",
+            filetypes=[("WaveDrom JSON", "*.json"), (tr("All Files"), "*.*")])
         if not path:
             return
         try:
             export_wavedrom(self.model, path)
-            messagebox.showinfo("Export WaveDrom",
-                                f"Exported WaveDrom JSON:\n{path}\n\n"
+            messagebox.showinfo(tr("Export WaveDrom"),
+                                tr("Exported WaveDrom JSON:\n{path}\n\n"
                                 "You can paste it into wavedrom.com or render it with wavedrom-cli.\n"
-                                "Note: visuals such as color and uniform slope are redrawn by WaveDrom and not preserved.")
+                                "Note: visuals such as color and uniform slope are redrawn by WaveDrom and not preserved.").format(path=path))
         except Exception as ex:
-            messagebox.showerror("Export Failed", str(ex))
+            messagebox.showerror(tr("Export Failed"), str(ex))
 
+
+    def _set_language(self, code):
+        """Persist the language preference; applied on next launch (menus/dialogs are built once)."""
+        usersettings.set_value("language", code)
+        messagebox.showinfo(tr("Language"),
+                            tr("Language preference saved. Restart RetroWave to apply."))
+
+    def _show_text_window(self, title, text, size=(640, 520)):
+        """A solid, scrollable read-only document window (replaces hard-to-read messageboxes)."""
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.configure(bg=Style.FACE)
+        win.geometry(f"{size[0]}x{size[1]}")
+        win.minsize(420, 300)
+        win.transient(self)
+        body = tk.Frame(win, bg=Style.FACE, bd=2, relief=tk.SUNKEN)
+        body.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
+        txt = tk.Text(body, wrap="word", bg=Style.CANVAS_BG, fg=Style.TEXT,
+                      font=("Tahoma", 10), relief=tk.FLAT, padx=12, pady=10,
+                      spacing1=2, spacing3=6)
+        sb = tk.Scrollbar(body, command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        txt.tag_configure("h", font=("Tahoma", 10, "bold"), spacing1=10, spacing3=4)
+        for line in text.split("\n"):
+            if line.startswith("[") and "]" in line:     # [Section] headings get bold styling
+                head, _, rest = line.partition("]")
+                txt.insert("end", head + "]", "h")
+                txt.insert("end", rest + "\n")
+            else:
+                txt.insert("end", line + "\n")
+        txt.configure(state="disabled")
+        make_key_button(win, tr("Close"), win.destroy, width=10).pack(side=tk.BOTTOM, pady=(0, 8))
+        win.bind("<Escape>", lambda e: win.destroy())
+        win.focus_set()
+        return win
 
     def help_usage(self):
-        messagebox.showinfo("Usage",
-            "[Drawing waveforms] After picking an element: click a cell to draw it; drag to brush along the starting row (row-locked).\n"
+        return self._show_text_window(tr("Usage"),
+            tr("[Drawing waveforms] After picking an element: click a cell to draw it; drag to brush along the starting row (row-locked).\n"
             "  - BUS: cells that are already BUS keep continuing; only non-BUS cells become BUS.\n"
             "         Click the same cell again to enter/edit the data value.\n"
             "[Box-select (canvas)] Shift or Ctrl + drag is always pure box-select:\n"
@@ -1394,21 +1442,21 @@ class App(tk.Tk):
             "  - Click an element button or press number keys 1~6 to return to draw mode.\n"
             "[Offset] After shifting offset right, the left edge auto-extends the first cell's level and the right end is trimmed flush, giving a sense of continuity.\n"
             "[Export] Images PNG (1-4x)/SVG (vector)/EPS; you can also export the WaveDrom JSON interchange format.\n"
-            "[Other] Right-click a waveform also offers \"Clear to L\"; double-click a name to rename; Esc falls back to pan mode and clears box-select.")
+            "[Other] Right-click a waveform also offers \"Clear to L\"; double-click a name to rename; Esc falls back to pan mode and clears box-select."))
 
     def help_keys(self):
-        messagebox.showinfo("Shortcuts",
-            "Ctrl+N/O/S/E New/Open/Save/Export   Ctrl+C/V Copy/Paste\n"
+        return self._show_text_window(tr("Shortcuts"),
+            tr("Ctrl+N/O/S/E New/Open/Save/Export   Ctrl+C/V Copy/Paste\n"
             "Ctrl+Z/Y Undo/Redo (last 5 steps; one brush/fill/paste = one step)\n"
             "1~6 Switch element (CLK/H/L/BUS/HiZ/Unknown)\n"
             "Esc Pan mode (deselect element/clear box-select); in pan mode left-drag = pan canvas\n"
             "Shift/Ctrl+drag Box-select (works in both modes)   Press an element key = fill the selection\n"
             "Name column Ctrl/Shift+click for multi-select -> right-click menu (color/offset/group/rename/delete)\n"
             "Right-click a waveform Create anchor/Clear to L; drag an anchor to draw a relationship line; Del deletes annotations\n"
-            "Double-click a name to rename")
+            "Double-click a name to rename"), size=(620, 320))
 
     def help_about(self):
-        messagebox.showinfo("About", f"RetroWave v{__version__}\nDigital circuit waveform editor\nPython + tkinter")
+        messagebox.showinfo(tr("About"), tr("RetroWave v{v}\nDigital circuit waveform editor\nPython + tkinter").format(v=__version__))
 
 
 def main():

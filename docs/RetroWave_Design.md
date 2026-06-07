@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.29** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.30** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -936,6 +936,21 @@ A step-by-step overlay shown on first launch (and on demand from *Help → Inter
   as `show_tutorial` in `~/.retrowave/settings.json`. Automation/tests suppress the tour via
   the `RETROWAVE_NO_TUTORIAL` env var.
 
+### 11.2 Internationalization (i18n)
+
+- **English source strings are the catalog keys.** Every user-facing string in the shell is
+  wrapped in `tr("...")`; for the default language (English) the string is returned unchanged,
+  so English needs no catalog and any untranslated string gracefully falls back to English.
+  Dynamic values use named templates: `tr("Saved:\n{path}").format(path=...)` — never
+  interpolate before translating.
+- **Catalogs are plain language modules** (`locales/zh_tw.py` exporting a dict), not data
+  files — they bundle into binaries like any other module, with no packaging flags. A catalog
+  file is the one sanctioned exception to the English-only-sources rule.
+- **Preference & lifecycle**: the `language` key in the user settings file; applied once at
+  startup before any UI text is built (*Help → Language* switches it; takes effect on
+  restart — widgets are built once, no live re-render).
+- Currently shipped: English (source) and Traditional Chinese (zh-TW).
+
 ---
 
 ## 12. Reimplementation guidance for React + SVG/CSS
@@ -1114,6 +1129,17 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.30** — **Help readability, tutorial-card sizing, and bilingual UI (i18n).**
+  (1) *Usage* and *Shortcuts* moved from cramped message boxes to solid, scrollable document
+  windows with bold section headings and an Esc/Close affordance. (2) The tutorial info card
+  now measures its wrapped body text and sizes itself to fit — fixed heights overlapped the
+  button row (notably the skip/checkbox area) once English copy ran longer than the original.
+  (3) New i18n layer (§11.2): `tr()` with English source strings as keys, catalogs as plain
+  language modules, `usersettings` extracted as a shared headless preferences store, a
+  *Help → Language* switcher (restart-applied), and a complete Traditional Chinese catalog
+  (182 entries, recovered from the pre-localization git history) — the UI now ships in
+  English and zh-TW. Guards: `tests/test_i18n.py` (7 tests) + full suite green in the
+  default language.
 - **v1.29** — **Full English localization of the published tree.** All user-facing UI strings
   (menus, dialogs, status bar, help, the onboarding tutorial) and every source comment,
   docstring, and test were translated from Chinese to English; the default group name became

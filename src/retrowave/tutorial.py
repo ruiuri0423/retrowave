@@ -9,39 +9,15 @@ A shell-layer module (a UI shell like app.py, allowed to import tkinter).
 - Exit: on the last step, tick "Don't show on next launch" and click Finish; pressing "Skip" at any
   time exits immediately and won't reopen. The preference is stored in ~/.retrowave/settings.json (show_tutorial).
 """
-import json
-import os
 import tkinter as tk
 
+from .i18n import tr
 from .theme import Style
+from .usersettings import load_settings, save_settings  # re-exported for tests/back-compat
 
-SETTINGS_DIR = os.path.join(os.path.expanduser("~"), ".retrowave")
-SETTINGS_FILE = "settings.json"
 HOLE = "#FF00FE"            # cut-out color (transparentcolor; a magenta the UI palette never uses)
 RING = "#FFD34D"            # highlight frame
 CARD_BG = "#FBF8EC"; CARD_BD = "#8A867A"
-
-
-def _settings_path():
-    return os.path.join(SETTINGS_DIR, SETTINGS_FILE)
-
-
-def load_settings():
-    try:
-        with open(_settings_path(), encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-def save_settings(d):
-    try:
-        os.makedirs(SETTINGS_DIR, exist_ok=True)
-        with open(_settings_path(), "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception:
-        return False
 
 
 def tutorial_enabled():
@@ -126,7 +102,14 @@ class TutorialOverlay(tk.Toplevel):
         # ---- info card: avoid the highlight region (highlight in upper half -> card below, and vice versa) ----
         cw = min(self.CARD_W, W - 40)
         last = self.idx == len(self.steps) - 1
-        ch = 190 + (30 if last else 0)
+        # Measure the wrapped body height first, then size the card to fit —
+        # fixed heights overlap the button row when translations run long.
+        tmp = cv.create_text(0, -10000, anchor="nw", text=body, width=cw - 36,
+                             font=("Tahoma", 10))
+        tb = cv.bbox(tmp)
+        body_h = (tb[3] - tb[1]) if tb else 60
+        cv.delete(tmp)
+        ch = 48 + body_h + 18 + (34 if last else 0) + 52   # title + body + gap (+checkbox) + buttons
         cx = (W - cw) // 2
         if bbox is None:
             cy = (H - ch) // 2
@@ -147,19 +130,19 @@ class TutorialOverlay(tk.Toplevel):
 
         # ---- button row ----
         by = cy + ch - 38
-        btn_skip = tk.Button(cv, text="Skip (don't show again)", font=Style.UI_FONT,
+        btn_skip = tk.Button(cv, text=tr("Skip (don't show again)"), font=Style.UI_FONT,
                              bg=CARD_BG, relief=tk.GROOVE, command=self.skip)
         cv.create_window(cx + 18, by, anchor="w", window=btn_skip)
         if self.idx > 0:
-            btn_prev = tk.Button(cv, text="◀ Back", font=Style.UI_FONT,
+            btn_prev = tk.Button(cv, text=tr("◀ Back"), font=Style.UI_FONT,
                                  bg=CARD_BG, relief=tk.GROOVE, command=self.prev)
             cv.create_window(cx + cw - 118, by, anchor="e", window=btn_prev)
-        btn_next = tk.Button(cv, text=("Finish" if last else "Next ▶"),
+        btn_next = tk.Button(cv, text=(tr("Finish") if last else tr("Next ▶")),
                              font=("Tahoma", 9, "bold"), bg="#EDE7CF",
                              relief=tk.RAISED, command=(self.finish if last else self.next))
         cv.create_window(cx + cw - 18, by, anchor="e", window=btn_next)
         if last:                                  # last step: don't-show-next-time checkbox
-            chk = tk.Checkbutton(cv, text="Don't show this tutorial again",
+            chk = tk.Checkbutton(cv, text=tr("Don't show this tutorial again"),
                                  variable=self.dont_show, font=Style.UI_FONT,
                                  bg=CARD_BG, activebackground=CARD_BG)
             cv.create_window(cx + 18, by - 32, anchor="w", window=chk)

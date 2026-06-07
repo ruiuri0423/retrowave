@@ -10,7 +10,8 @@ from retrowave.tutorial import TutorialOverlay
 @pytest.fixture
 def settings_tmp(tmp_path, monkeypatch):
     """Redirect the settings file to a temp dir, to avoid touching the real ~/.retrowave."""
-    monkeypatch.setattr(tut, "SETTINGS_DIR", str(tmp_path))
+    import retrowave.usersettings as us
+    monkeypatch.setattr(us, "SETTINGS_DIR", str(tmp_path))
     return tmp_path
 
 

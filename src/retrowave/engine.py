@@ -59,12 +59,23 @@ class Engine:
             if kind == "group":            # ---- 群組標頭列 (依深度縮排) ----
                 meta = model.groups.get(ref, {})
                 gcol = rgcol
-                tri = "▸" if meta.get("collapsed") else "▾"
                 gx = 8 + depth * 16
+                gy = (row_top + row_bot) // 2
+                col = gcol or Style.TEXT
                 name_cv.create_rectangle(0, row_top, NW, row_bot, fill=Style.FACE, outline=Style.FACE_DARK)
-                name_cv.create_text(gx, (row_top + row_bot) // 2,
-                                    text=f"{tri} {meta.get('name', ref)}",
-                                    anchor="w", font=Style.NAME_FONT, fill=(gcol or Style.TEXT))
+                # 折疊三角形以向量多邊形繪製（不依賴字型字符 ▸/▾ 的覆蓋率，
+                # 螢幕與 PNG/SVG 匯出在任何字型環境下都一致）
+                ts = 4 * self._scale_of(name_cv)
+                if meta.get("collapsed"):       # 右指（收合）
+                    name_cv.create_polygon([gx, gy - ts, gx + ts * 1.6, gy, gx, gy + ts],
+                                           fill=col, outline=col)
+                else:                           # 下指（展開）
+                    name_cv.create_polygon([gx - ts * 0.3, gy - ts * 0.7,
+                                            gx + ts * 1.9, gy - ts * 0.7,
+                                            gx + ts * 0.8, gy + ts * 0.9],
+                                           fill=col, outline=col)
+                name_cv.create_text(gx + 6 + ts * 1.9, gy, text=meta.get("name", ref),
+                                    anchor="w", font=Style.NAME_FONT, fill=col)
                 wave_cv.create_rectangle(0, row_top, grid_w, row_bot, fill=Style.FACE, outline="")
                 if gcol:
                     wave_cv.create_rectangle(0, row_top, grid_w, row_top + 3, fill=gcol, outline="")

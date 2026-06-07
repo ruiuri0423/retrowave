@@ -17,20 +17,6 @@ python -m pytest tests/test_model.py -k group        # 跑子集
 python -m compileall -q src    # 語法檢查
 ```
 
-**讀 code 神器 — Model 呼叫追蹤**：設 `RETROWAVE_TRACE=1`（PowerShell：
-`$env:RETROWAVE_TRACE=1`）後啟動或跑腳本，Model 的操作以縮排樹印到 stderr，四種行：
-
-| 標記 | 意義 |
-|---|---|
-| `>` / `<` | 方法進入（含參數）/ 返回（僅有回傳值時印） |
-| `.` | 方法內細步（`_t()`：marker 三步驟、對帳修復、載檔階段、防呆拒絕…） |
-| `~` | 狀態差異（返回時自動 diff 樹形/池序/groups/標注/週期，只印有變的面向） |
-
-樹形用單行精簡表示：葉=sid、群組=`gid(children)`、折疊=`gid*`、暫存=`#marker` —
-所以 marker 法的整個生命週期（插入→摘葉→取代）在 `~ tree:` 行裡直接可見。
-高頻唯讀方法（`layout`/`new_cell`）預設不追，`RETROWAVE_TRACE=all` 連它們也追。
-預設關閉、零開銷（實作在 `model.py` 檔尾；細步點是方法內的 `_t(...)` 呼叫，關閉時 no-op）。
-
 **提交門檻**：pytest 全綠 + 語法檢查通過，缺一不可。
 
 ## 2. 程式碼地圖（設計章節 ↔ 符號）

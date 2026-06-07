@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""匯出管線（繪圖單元）：純函式 (model, geom) → 檔案/dict，與 UI 完全無關、headless 可測。
-PNG 需 Pillow（函式內延遲匯入）；SVG / WaveDrom 零依賴。
-例外：EPS 匯出直接快照螢幕畫布（tk postscript），故留在 app（設計文件 §9.3）。"""
+"""Export pipeline (drawing unit): pure functions (model, geom) -> file/dict,
+fully UI-independent and headless-testable. PNG needs Pillow (lazily imported
+inside the function); SVG / WaveDrom are zero-dependency.
+Exception: EPS export snapshots the live screen canvas (tk postscript), so it
+stays in the app shell (design spec §9.3)."""
 import json
 
 from .backends import PILCanvas, SVGCanvas, _load_pil_fonts
@@ -10,7 +12,8 @@ from .theme import Style
 
 
 def export_png(model, geom, path, scale=2):
-    """以 scale 倍幾何重新繪製輸出 PNG（真高解析重繪，非放大）。需 Pillow。"""
+    """Re-render at scale× geometry and write a PNG (true high-density re-render,
+    not an upscale). Requires Pillow."""
     from PIL import Image, ImageDraw
     g = geom.copy_scaled(scale)
     fonts = _load_pil_fonts(scale)
@@ -23,7 +26,7 @@ def export_png(model, geom, path, scale=2):
     wave_img = Image.new("RGB", (wave_w, total_h), Style.CANVAS_BG)
     nd = PILCanvas(ImageDraw.Draw(name_img), fonts, scale=scale)
     wd = PILCanvas(ImageDraw.Draw(wave_img), fonts, scale=scale)
-    Engine().draw(nd, wd, model, set(), g, None)   # 不含選取高亮
+    Engine().draw(nd, wd, model, set(), g, None)   # without selection highlight
     final = Image.new("RGB", (NW + wave_w, total_h), Style.CANVAS_BG)
     final.paste(name_img, (0, 0)); final.paste(wave_img, (NW, 0))
     final.save(path)
@@ -31,7 +34,8 @@ def export_png(model, geom, path, scale=2):
 
 
 def svg_string(model, geom):
-    """組出整張圖的 SVG 字串（名稱欄 + 波形區合成單檔，虛線格線保留）。"""
+    """Build the full-diagram SVG string (name column + wave area composed into
+    one file; the dashed period grid is preserved)."""
     g = geom; rows = model.layout()
     NW = g.name_w
     total_h = g.header_h + len(rows) * g.row_h
@@ -55,7 +59,8 @@ def export_svg(model, geom, path):
 
 
 def wavedrom_dict(model):
-    """轉成 WaveDrom JSON 結構（交換格式；顏色/統一斜率視覺不保留，node/edge 可帶過去）。"""
+    """Convert to the WaveDrom JSON structure (interchange format; colors and the
+    unified-slope styling are not preserved, node/edge annotations carry over)."""
     m = model
     basech = {"CLK": "p", "H": "1", "L": "0", "HiZ": "z", "Unknown": "x", "BUS": "="}
     sid_nodes = {}                          # sid -> {period: nid}
@@ -80,7 +85,7 @@ def wavedrom_dict(model):
             o["data"] = data
         off = s.get("offset", 0.0)
         if off:
-            o["phase"] = -round(off, 3)     # WaveDrom phase 正值=左移，故取負
+            o["phase"] = -round(off, 3)     # positive WaveDrom phase shifts left, hence negated
         nm = sid_nodes.get(s.get("sid"))
         if nm:
             arr = ["."] * m.n_periods

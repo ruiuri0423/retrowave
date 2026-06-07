@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""UI 殼層：整個套件唯一允許 import tkinter 的模組。
-設計文件 §8/§11；§14 的 UI↔Core protocol（R1–R5）是本模組的遷移目標契約。"""
+"""UI shell: the only module in the whole package allowed to import tkinter.
+Design doc §8/§11; the UI<->Core protocol (R1-R5) in §14 is this module's migration target contract."""
 import json
 import math
 import os
@@ -34,7 +34,7 @@ def make_key_button(parent, text, command, width=None):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"RetroWave - 數位波型繪製工具  v{__version__}")
+        self.title(f"RetroWave - Digital Waveform Editor  v{__version__}")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.doc = Document(scheduler=self.after_idle)
@@ -48,7 +48,7 @@ class App(tk.Tk):
         self._press = None; self._press_xy = (0, 0); self._moved = False
         self._marquee = None; self._selecting = False; self._panning = False
         self._pan_anchor = None
-        self._render_job = None                 # 待執行的合併重繪 (after_idle id)
+        self._render_job = None                 # pending coalesced redraw (after_idle id)
         self._drag_value = None; self._hover = None
         self._hover_node = None; self._hover_edge = None
         self._connecting = False; self._connect_from = None; self._connect_xy = None
@@ -57,12 +57,12 @@ class App(tk.Tk):
         self.lib = TemplateLibrary()
         self._build_menubar(); self._build_toolbar(); self._build_main()
         self._build_statusbar(); self._bind_keys()
-        self._set_tool("H"); self.render()          # 首次繪製須同步，視窗一出現即完整
-        self.after(150, self._startup_templates)    # 視窗顯示後再載入範本/提示缺檔
-        self.after(450, self._maybe_show_tutorial)  # 首次啟動顯示開啟教學
+        self._set_tool("H"); self.render()          # first draw must be synchronous so the window is complete on appearance
+        self.after(150, self._startup_templates)    # load templates / warn about missing files after the window shows
+        self.after(450, self._maybe_show_tutorial)  # show the tutorial on first launch
 
     def _maybe_show_tutorial(self, force=False):
-        """首啟教學：可被環境變數（測試/自動化）與使用者偏好關閉；Help 選單可強制重開。"""
+        """First-launch tutorial: can be disabled by an env var (testing/automation) and user preference; the Help menu can force it open again."""
         if not force:
             if os.environ.get("RETROWAVE_NO_TUTORIAL"):
                 return
@@ -73,59 +73,61 @@ class App(tk.Tk):
         self._tutorial = TutorialOverlay(self, self._tutorial_steps())
 
     def _tutorial_steps(self):
-        toolbar = self.tool_btns["CLK"].master       # 元件工具列整條
-        cfg = self.sp_p.master                       # 幾何/週期 spinbox 區
+        toolbar = self.tool_btns["CLK"].master       # the whole element toolbar
+        cfg = self.sp_p.master                       # the geometry/period spinbox area
         return [
-            (None, "歡迎使用 RetroWave",
-             "這是一支復古風的數位時序／波形編輯器。\n"
-             "接下來用幾步帶你認識主要操作 — 亮起的區域就是當下可以動手的地方，"
-             "你可以直接在上面操作試試。\n\n（隨時按 Esc 或「略過」結束教學）"),
-            (toolbar, "元件工具列",
-             "點選元件（或按數字鍵 1~6）：CLK 時脈、H 高準位、L 低準位、"
-             "BUS 資料匯流排、HiZ 高阻抗、Unknown 未知。\n"
-             "「＋訊號」新增一條訊號列。選好元件後就能在右側畫布上畫波形。"),
-            (self.wave_cv, "波形畫布",
-             "點一格畫一格；按住拖曳沿同一列連刷（鎖列不怕手抖）。\n"
-             "BUS 格再點一次可輸入資料值。\n"
-             "Shift/Ctrl + 拖曳 = 框選（按元件鍵整塊填入、Ctrl+C/V 複製貼上）。\n"
-             "右鍵可建立錨點，按住錨點拖到另一錨點 = 拉量測/關係線。"),
-            (self.name_cv, "訊號名稱欄",
-             "點選訊號（Ctrl/Shift 多選）；右鍵選單：調色、位移、建立群組、改名、刪除。\n"
-             "按住名稱上下拖曳可重排，拖進群組 = 併入、拖到最下方空白 = 移出群組。\n"
-             "點群組標頭可折疊/展開整組。"),
-            (cfg, "幾何與週期",
-             "調整格寬、列高、轉換斜率比例與週期數，畫面即時反映。\n"
-             "這些屬於檢視設定，會跟著專案 JSON 一起存檔。"),
-            (None, "最後幾招",
-             "Esc = 拖曳模式（左鍵平移畫布，不會誤畫）。\n"
-             "Ctrl+Z / Ctrl+Y = 復原 / 重做（最近 5 步，一次手勢算一步）。\n"
-             "File 選單可存檔（JSON）、匯出 PNG/SVG/EPS 與 WaveDrom。\n"
-             "之後想重看教學：Help → 使用教學。"),
+            (None, "Welcome to RetroWave",
+             "This is a retro-style digital timing / waveform editor.\n"
+             "The next few steps walk you through the main operations - the highlighted area "
+             "is what you can act on right now, so feel free to try it directly.\n\n"
+             "(Press Esc or \"Skip\" any time to end the tutorial.)"),
+            (toolbar, "Element Toolbar",
+             "Pick an element (or press number keys 1-6): CLK clock, H high level, L low level, "
+             "BUS data bus, HiZ high impedance, Unknown.\n"
+             "\"+ Signal\" adds a new signal row. Once an element is selected you can draw "
+             "waveforms on the canvas to the right."),
+            (self.wave_cv, "Waveform Canvas",
+             "Click a cell to draw it; press and drag to brush along the same row (row-locked, no slips).\n"
+             "Click a BUS cell again to enter its data value.\n"
+             "Shift/Ctrl + drag = box-select (press an element key to fill the block, Ctrl+C/V to copy and paste).\n"
+             "Right-click to create an anchor; drag from one anchor to another to draw a measurement / relationship line."),
+            (self.name_cv, "Signal Name Column",
+             "Select signals (Ctrl/Shift for multi-select); right-click menu: color, offset, create group, rename, delete.\n"
+             "Press and drag a name up/down to reorder; drag into a group = merge in, drag to the empty space at the bottom = move out of the group.\n"
+             "Click a group header to collapse/expand the whole group."),
+            (cfg, "Geometry and Periods",
+             "Adjust cell width, row height, transition slope ratio and period count - the view updates instantly.\n"
+             "These are view settings and are saved together with the project JSON."),
+            (None, "A Few Last Tricks",
+             "Esc = pan mode (left-drag pans the canvas, no accidental drawing).\n"
+             "Ctrl+Z / Ctrl+Y = undo / redo (last 5 steps, one gesture counts as one step).\n"
+             "The File menu lets you save (JSON) and export PNG/SVG/EPS and WaveDrom.\n"
+             "To see the tutorial again later: Help -> Interactive tutorial."),
         ]
 
     @property
     def model(self):
-        """CQRS 讀路徑：渲染/版面/命中測試唯讀直通；任何寫入一律走 self.doc 命令。"""
+        """CQRS read path: read-only pass-through for rendering/layout/hit-testing; any write goes through self.doc commands."""
         return self.doc.model
 
     def _on_doc_changed(self, scopes):
-        """傳遞層 change 事件 → 重繪（合併排程）。"""
+        """Document change event -> redraw (coalesced scheduling)."""
         self.request_render()
 
     def _build_menubar(self):
         bar = tk.Frame(self, bg=Style.FACE, bd=1, relief=tk.RAISED); bar.pack(side=tk.TOP, fill=tk.X)
         fmb = tk.Menubutton(bar, text="File", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         fm = tk.Menu(fmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        fm.add_command(label="新增 (New)\tCtrl+N", command=self.do_new)
-        fm.add_command(label="開啟… (Load)\tCtrl+O", command=self.do_open)
-        fm.add_command(label="儲存… (Save)\tCtrl+S", command=self.do_save)
+        fm.add_command(label="New\tCtrl+N", command=self.do_new)
+        fm.add_command(label="Load...\tCtrl+O", command=self.do_open)
+        fm.add_command(label="Save...\tCtrl+S", command=self.do_save)
         fm.add_separator()
-        fm.add_command(label="匯入範本… (Import Template)", command=self._import_template)
+        fm.add_command(label="Import Template...", command=self._import_template)
         fm.add_separator()
-        fm.add_command(label="匯出圖片… (Export)\tCtrl+E", command=self.do_export)
-        fm.add_command(label="匯出 WaveDrom JSON…", command=self.do_export_wavedrom)
+        fm.add_command(label="Export Image...\tCtrl+E", command=self.do_export)
+        fm.add_command(label="Export WaveDrom JSON...", command=self.do_export_wavedrom)
         fm.add_separator()
-        fm.add_command(label="離開 (Exit)", command=self.destroy)
+        fm.add_command(label="Exit", command=self.destroy)
         fmb.configure(menu=fm); fmb.pack(side=tk.LEFT)
 
         tmb = tk.Menubutton(bar, text="Template", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
@@ -134,14 +136,14 @@ class App(tk.Tk):
         self._rebuild_template_menu()
         hmb = tk.Menubutton(bar, text="Help", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         hm = tk.Menu(hmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        hm.add_command(label="使用教學（互動導覽）", command=lambda: self._maybe_show_tutorial(force=True))
-        hm.add_command(label="使用說明", command=self.help_usage)
-        hm.add_command(label="快捷鍵", command=self.help_keys)
+        hm.add_command(label="Interactive tutorial", command=lambda: self._maybe_show_tutorial(force=True))
+        hm.add_command(label="Usage", command=self.help_usage)
+        hm.add_command(label="Shortcuts", command=self.help_keys)
         hm.add_separator()
-        hm.add_command(label="關於 RetroWave", command=self.help_about)
+        hm.add_command(label="About RetroWave", command=self.help_about)
         hmb.configure(menu=hm); hmb.pack(side=tk.LEFT)
 
-    # ---- 範本庫 ----
+    # ---- Template library ----
     def _rebuild_template_menu(self):
         m = self.tmpl_menu
         m.delete(0, "end")
@@ -152,46 +154,46 @@ class App(tk.Tk):
             rem = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
             for e in self.lib.entries:
                 rem.add_command(label=e["name"], command=lambda en=e: self._remove_template(en["name"]))
-            self._tmpl_rem = rem               # 保留參考避免被回收
-            m.add_cascade(label="移除範本", menu=rem)
+            self._tmpl_rem = rem               # keep a reference so it isn't garbage-collected
+            m.add_cascade(label="Remove Template", menu=rem)
         else:
-            m.add_command(label="(尚無範本)", state="disabled")
+            m.add_command(label="(No templates yet)", state="disabled")
         m.add_separator()
-        m.add_command(label="匯入範本… (Import)", command=self._import_template)
-        m.add_command(label="將目前畫布存成範本…", command=self._save_as_template)
+        m.add_command(label="Import Template...", command=self._import_template)
+        m.add_command(label="Save Current Canvas as Template...", command=self._save_as_template)
 
     def _startup_templates(self):
         avail, missing = self.lib.load()
         self._rebuild_template_menu()
         if missing:
-            lines = "\n".join(f"・{m['name']}    ({m.get('path') or '路徑未知'})" for m in missing)
+            lines = "\n".join(f"- {m['name']}    ({m.get('path') or 'unknown path'})" for m in missing)
             messagebox.showwarning(
-                "範本載入", f"以下範本檔案找不到，已從清單移除：\n\n{lines}")
+                "Template Loading", f"The following template files could not be found and were removed from the list:\n\n{lines}")
 
     def _import_template(self):
         path = filedialog.askopenfilename(
-            title="匯入範本 (JSON)", filetypes=[("波型 JSON", "*.json"), ("所有檔案", "*.*")])
+            title="Import Template (JSON)", filetypes=[("Waveform JSON", "*.json"), ("All Files", "*.*")])
         if not path:
             return
         try:
             d = TemplateLibrary.read(path)
             if not isinstance(d, dict) or "signals" not in d:
-                raise ValueError("不是有效的波型 JSON（缺 signals 欄位）")
+                raise ValueError("Not a valid waveform JSON (missing signals field)")
         except Exception as ex:
-            messagebox.showerror("匯入範本失敗", str(ex)); return
+            messagebox.showerror("Import Template Failed", str(ex)); return
         default = os.path.splitext(os.path.basename(path))[0]
-        name = simpledialog.askstring("匯入範本", "範本名稱:", initialvalue=default, parent=self)
+        name = simpledialog.askstring("Import Template", "Template name:", initialvalue=default, parent=self)
         if not name:
             return
         self.lib.add(name, path); self._rebuild_template_menu()
-        messagebox.showinfo("匯入範本",
-                            f"已加入範本「{name}」。\n（此範本會在每次開啟工具時自動載入，"
-                            f"從 Template 選單點選即可插入為群組。）")
+        messagebox.showinfo("Import Template",
+                            f"Template \"{name}\" added.\n(This template loads automatically every time "
+                            f"the tool opens; pick it from the Template menu to insert it as a group.)")
 
     def _save_as_template(self):
         path = filedialog.asksaveasfilename(
-            title="將目前畫布存成範本", defaultextension=".json",
-            initialdir=TemplateLibrary.DIR, filetypes=[("波型 JSON", "*.json")])
+            title="Save Current Canvas as Template", defaultextension=".json",
+            initialdir=TemplateLibrary.DIR, filetypes=[("Waveform JSON", "*.json")])
         if not path:
             return
         data = self.model.to_dict(); data["view"] = self.geom.to_dict()
@@ -200,47 +202,47 @@ class App(tk.Tk):
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as ex:
-            messagebox.showerror("存成範本失敗", str(ex)); return
+            messagebox.showerror("Save as Template Failed", str(ex)); return
         default = os.path.splitext(os.path.basename(path))[0]
-        name = simpledialog.askstring("存成範本", "範本名稱:", initialvalue=default, parent=self)
+        name = simpledialog.askstring("Save as Template", "Template name:", initialvalue=default, parent=self)
         if not name:
             return
         self.lib.add(name, path); self._rebuild_template_menu()
-        messagebox.showinfo("範本", f"已存成範本「{name}」。")
+        messagebox.showinfo("Template", f"Saved as template \"{name}\".")
 
     def _remove_template(self, name):
         self.lib.remove(name); self._rebuild_template_menu()
-        self.status.configure(text=f" 已從範本庫移除「{name}」（原檔案不受影響）")
+        self.status.configure(text=f" Removed \"{name}\" from the template library (the original file is unaffected)")
 
     def _insert_template(self, entry):
         try:
             tsignals = TemplateLibrary.read(entry["path"]).get("signals", [])
         except Exception as ex:
-            messagebox.showerror("插入範本失敗",
-                                 f"讀取失敗，檔案可能已移動或刪除。\n{entry.get('path')}\n\n{ex}")
+            messagebox.showerror("Insert Template Failed",
+                                 f"Read failed; the file may have been moved or deleted.\n{entry.get('path')}\n\n{ex}")
             return
         if not tsignals:
-            messagebox.showwarning("插入範本", "此範本沒有任何訊號。"); return
+            messagebox.showwarning("Insert Template", "This template has no signals."); return
         gname, newidx = self.doc.insert_template(entry["name"], tsignals)
         self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
         self.request_render()
-        self.status.configure(text=f" 已插入範本「{gname}」（{len(newidx)} 條，已成群組）")
+        self.status.configure(text=f" Inserted template \"{gname}\" ({len(newidx)} signals, grouped)")
 
     def _build_toolbar(self):
         tb = tk.Frame(self, bg=Style.FACE, bd=1, relief=tk.RAISED); tb.pack(side=tk.TOP, fill=tk.X)
         cfg = tk.Frame(tb, bg=Style.FACE); cfg.pack(side=tk.RIGHT, padx=6, pady=4)
-        self.sp_w = self._spin(cfg, "寬度", 30, 240, 4, self.geom.period_w, self._apply_geom)
-        self.sp_h = self._spin(cfg, "列高", 36, 160, 4, self.geom.row_h, self._apply_geom)
-        self.sp_r = self._spin(cfg, "斜率%", 5, 45, 1, int(self.geom.ramp_ratio * 100), self._apply_geom)
-        self.sp_p = self._spin(cfg, "週期", 1, 256, 1, self.model.n_periods, self._apply_periods)
+        self.sp_w = self._spin(cfg, "Width", 30, 240, 4, self.geom.period_w, self._apply_geom)
+        self.sp_h = self._spin(cfg, "Row H", 36, 160, 4, self.geom.row_h, self._apply_geom)
+        self.sp_r = self._spin(cfg, "Slope%", 5, 45, 1, int(self.geom.ramp_ratio * 100), self._apply_geom)
+        self.sp_p = self._spin(cfg, "Periods", 1, 256, 1, self.model.n_periods, self._apply_periods)
 
-        tk.Label(tb, text="元件:", bg=Style.FACE, font=Style.UI_FONT).pack(side=tk.LEFT, padx=(6, 2), pady=6)
+        tk.Label(tb, text="Element:", bg=Style.FACE, font=Style.UI_FONT).pack(side=tk.LEFT, padx=(6, 2), pady=6)
         for t in WAVE_TYPES:
             b = make_key_button(tb, t, lambda x=t: self._set_tool(x))
             b.pack(side=tk.LEFT, padx=2, pady=6); self.tool_btns[t] = b
         tk.Frame(tb, width=2, bg=Style.FACE_DARK).pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=8)
-        make_key_button(tb, "＋訊號", self.add_signal).pack(side=tk.LEFT, padx=2, pady=6)
-        tk.Label(tb, text="(訊號右鍵：調色/位移/群組/改名/刪除；點群組標頭折疊)", bg=Style.FACE,
+        make_key_button(tb, "+ Signal", self.add_signal).pack(side=tk.LEFT, padx=2, pady=6)
+        tk.Label(tb, text="(right-click a signal for actions)", bg=Style.FACE,
                  font=Style.UI_FONT, fg="#777").pack(side=tk.LEFT, padx=(8, 2), pady=6)
 
     def _spin(self, parent, label, lo, hi, step, val, cmd):
@@ -276,7 +278,7 @@ class App(tk.Tk):
         if not self.model.signals:
             return
         cur = self.model.signals[self.selected].get("offset", 0.0)
-        v = simpledialog.askfloat("設定位移", "位移 (0 ~ 0.95 週期):",
+        v = simpledialog.askfloat("Set Offset", "Offset (0 ~ 0.95 of a period):",
                                   initialvalue=cur, minvalue=0.0, maxvalue=0.95, parent=self)
         if v is None:
             return
@@ -284,7 +286,7 @@ class App(tk.Tk):
         self.request_render()
 
     def _refresh_offset_field(self):
-        pass            # 位移已移至右鍵選單，無常駐欄位
+        pass            # offset moved to the right-click menu; no persistent field
 
     def _build_main(self):
         main = tk.Frame(self, bg=Style.FACE_DARK, bd=2, relief=tk.SUNKEN)
@@ -341,7 +343,7 @@ class App(tk.Tk):
             self.bind(str(i), keyed(lambda x=t: self._set_tool(x)))
 
     def _scrollable(self):
-        """回傳 (水平可捲, 垂直可捲)：內容尺寸未超過視窗可視範圍時，該軸禁止平移/滾動。"""
+        """Return (horizontally scrollable, vertically scrollable): when content size does not exceed the visible window area, panning/scrolling on that axis is disabled."""
         sr = self.wave_cv.cget("scrollregion").split()
         if len(sr) != 4:
             return (False, False)
@@ -359,16 +361,16 @@ class App(tk.Tk):
         d = -1 if (getattr(e, "delta", 0) > 0 or e.num == 4) else 1
         self.wave_cv.yview_scroll(d, "units"); self.name_cv.yview_scroll(d, "units")
 
-    # ---- 工具 ----
+    # ---- Tools ----
     def _set_tool(self, t):
-        if self.cell_sel is not None:          # 有框選 -> 填入該範圍
+        if self.cell_sel is not None:          # box-select active -> fill that range
             self._fill_selection(t); return
         self.active_tool = t; self._refresh_tools()
         self.wave_cv.configure(cursor="")
         self.request_render()
 
     def _enter_pan_mode(self):
-        """Esc：任何狀態皆退回畫布拖曳模式（清除框選、取消元件選擇）。"""
+        """Esc: from any state, fall back to canvas pan mode (clear box-select, deselect element)."""
         self.cell_sel = None
         self.active_tool = None; self._refresh_tools()
         self.wave_cv.configure(cursor="fleur")
@@ -386,7 +388,7 @@ class App(tk.Tk):
     def _fill_rect(self, sel, t):
         s0, s1, p0, p1 = sel
         if t == "BUS":
-            txt = simpledialog.askstring("填入 BUS", "此範圍的資料值:", parent=self)
+            txt = simpledialog.askstring("Fill BUS", "Data value for this range:", parent=self)
             if txt is None:
                 return None
             payload = ("BUS", txt)
@@ -394,38 +396,38 @@ class App(tk.Tk):
             payload = ("Unknown", "")
         else:
             payload = (t, "")
-        self.doc.begin()                        # 一次填入 = 一個 undo 單位
+        self.doc.begin()                        # one fill = one undo unit
         for s in range(s0, s1 + 1):
             for p in range(p0, p1 + 1):
                 self.doc.set_cell(s, p, payload[0], payload[1])
         self.doc.commit()
-        return f"已填入 {payload[0]}" + (f" = '{payload[1]}'" if payload[0] == "BUS" else "")
+        return f"Filled {payload[0]}" + (f" = '{payload[1]}'" if payload[0] == "BUS" else "")
 
     def _fill_selection(self, t):
         if self.cell_sel is None:
             return
         msg = self._fill_rect(self.cell_sel, t)
         if msg:
-            self.request_render(); self.status.configure(text=" " + msg + "（選取保留，Esc 清除）")
+            self.request_render(); self.status.configure(text=" " + msg + " (selection kept, Esc to clear)")
 
     def _update_status(self):
         if self.active_tool is None:
             self.status.configure(
-                text=f" 拖曳模式 | 左鍵拖曳=平移畫布 | Shift/Ctrl+左鍵拖曳=框選 "
-                     f"| 點元件鈕或數字鍵回繪製 | 週期{self.model.n_periods}")
+                text=f" Pan mode | Left-drag = pan canvas | Shift/Ctrl+left-drag = box-select "
+                     f"| Click an element button or number key to draw | Periods {self.model.n_periods}")
             return
         if self.active_tool == "BUS":
-            hint = "點/拖曳=畫BUS(原為BUS保留, 非BUS取代);再點同格=改值"
+            hint = "Click/drag = draw BUS (existing BUS kept, non-BUS replaced); click same cell again = edit value"
         else:
-            hint = "點/拖曳上色(鎖列)"
+            hint = "Click/drag to paint (row-locked)"
         self.status.configure(
-            text=f" 筆刷:{self.active_tool} | {hint} | Shift/Ctrl拖曳=框選(按元件鍵填入/Ctrl+C複製) "
-                 f"| 名稱Ctrl/Shift多選 -> 右鍵: 調色/位移/刪除 | Esc=拖曳模式 | 週期{self.model.n_periods}")
+            text=f" Brush: {self.active_tool} | {hint} | Shift/Ctrl drag = box-select (press element key to fill / Ctrl+C to copy) "
+                 f"| Name Ctrl/Shift multi-select -> right-click: color/offset/delete | Esc = pan mode | Periods {self.model.n_periods}")
 
     def request_render(self):
-        """合併重繪：同一事件迴圈周期內的多次請求，只在 idle 時重繪一次。
-        互動程式碼一律呼叫本方法；只有「接著要同步讀取畫布內容」(如 EPS 匯出的
-        postscript 快照、__init__ 首繪) 才直接呼叫 render()。"""
+        """Coalesced redraw: multiple requests within the same event-loop cycle redraw only once at idle.
+        Interactive code always calls this method; only code that "then needs to read canvas content
+        synchronously" (e.g. the postscript snapshot for EPS export, the first draw in __init__) calls render() directly."""
         if self._render_job is None:
             self._render_job = self.after_idle(self._render_now)
 
@@ -434,11 +436,11 @@ class App(tk.Tk):
         self.render()
 
     def render(self):
-        if self._render_job is not None:        # 同步重繪 -> 取消尚未執行的合併請求
+        if self._render_job is not None:        # synchronous redraw -> cancel a pending coalesced request
             self.after_cancel(self._render_job); self._render_job = None
         self.name_cv.configure(width=self.geom.name_w)
         self.engine.draw(self.name_cv, self.wave_cv, self.model, self.sig_sel, self.geom, self.cell_sel)
-        # 內容縮回視窗範圍內（刪列/收合群組等）時，把該軸拉回原點並保持名稱欄同步
+        # when content shrinks back within the window (deleting rows / collapsing groups, etc.), pull that axis back to origin and keep the name column in sync
         h_ok, v_ok = self._scrollable()
         if not v_ok:
             self.wave_cv.yview_moveto(0.0); self.name_cv.yview_moveto(0.0)
@@ -448,7 +450,7 @@ class App(tk.Tk):
         self._draw_drag_overlay()
         self._update_status()
 
-    # ---- 標注：座標/命中/覆蓋層 ----
+    # ---- Annotations: coordinates / hit-testing / overlay ----
     def _node_screen_positions(self):
         rows = self.model.layout()
         sig_row = {row.ref: r for r, row in enumerate(rows) if row.kind == "sig"}
@@ -502,7 +504,7 @@ class App(tk.Tk):
                 self.engine.draw_edge(self.wave_cv, a, b, ed.get("label", ""),
                                       hot=True, style=ed.get("style", "double"))
 
-    # ---- 座標 <-> 格子 (透過 layout 把可見列翻成訊號索引) ----
+    # ---- Coordinates <-> cells (use layout to map visible rows to signal indices) ----
     def _resolve_row(self, cy):
         if cy < self.geom.header_h:
             return None
@@ -548,7 +550,7 @@ class App(tk.Tk):
     def _ev_xy(self, e):
         return self.wave_cv.canvasx(e.x), self.wave_cv.canvasy(e.y)
 
-    # ---- 滑鼠 ----
+    # ---- Mouse ----
     def on_hover(self, e):
         cx, cy = self._ev_xy(e)
         self._hover = self._cell_from_xy(cx, cy)
@@ -564,24 +566,24 @@ class App(tk.Tk):
         self._press_xy = (cx, cy)
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
         nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
-        if nid:                                   # 從錨點拉線 (進入冷凍)；繪製/拖曳模式皆可
+        if nid:                                   # drag a line from an anchor (enter frozen state); works in both draw and pan mode
             self._connecting = True; self._connect_from = nid
             self._connect_xy = (cx, cy); self._press = None
             self._selecting = False; self._moved = False
             self.request_render(); return
-        if self.active_tool is None and not (ctrl or shift):   # 拖曳模式：左鍵=平移畫布
+        if self.active_tool is None and not (ctrl or shift):   # pan mode: left button = pan canvas
             self._panning = True
             self._pan_anchor = (e.x, e.y, self.wave_cv.xview()[0], self.wave_cv.yview()[0])
             self._press = None; self._selecting = False; self._moved = False
             return
         self._press = self._cell_from_xy(cx, cy)
         self._moved = False
-        self._selecting = ctrl or shift          # Shift/Ctrl 拖曳皆為純框選
+        self._selecting = ctrl or shift          # Shift/Ctrl drag is always pure box-select
         if self._press:
             self.selected = self._press[0]
         self._drag_value = None
         if self._press and not self._selecting and self.active_tool is not None:
-            self.doc.begin()                     # 一次筆刷手勢 = 一個 undo 單位
+            self.doc.begin()                     # one brush gesture = one undo unit
         if (not self._selecting) and self._press and self.active_tool == "BUS":
             cells = self.model.signals[self._press[0]]["cells"]; p = self._press[1]
             if cells[p]["type"] == "BUS":
@@ -596,9 +598,10 @@ class App(tk.Tk):
 
     def on_motion(self, e):
         if self._panning:
-            # 用 xview/yview_moveto 平移，並依 _scrollable() 明確禁止「內容未超出視窗」
-            # 的軸（取代 scan_dragto：scan 不受 scrollregion 限制，會造成內容比視窗矮
-            # 仍可垂直拖動、且拖出範圍後名稱欄 yview 同步失準）。
+            # pan via xview/yview_moveto, and per _scrollable() explicitly disable axes whose content
+            # does not exceed the window (instead of scan_dragto: scan is not bound by scrollregion,
+            # which would let content shorter than the window still drag vertically, and after dragging
+            # out of range the name column's yview would lose sync).
             ax, ay, fx, fy = self._pan_anchor
             sr = self.wave_cv.cget("scrollregion").split()
             sw = max(float(sr[2]) - float(sr[0]), 1.0)
@@ -606,7 +609,7 @@ class App(tk.Tk):
             h_ok, v_ok = self._scrollable()
             self.wave_cv.xview_moveto(fx + (ax - e.x) / sw if h_ok else 0.0)
             self.wave_cv.yview_moveto(fy + (ay - e.y) / sh if v_ok else 0.0)
-            self.name_cv.yview_moveto(self.wave_cv.yview()[0])   # 以夾住後的實際值同步名稱欄
+            self.name_cv.yview_moveto(self.wave_cv.yview()[0])   # sync the name column using the actual clamped value
             return
         cx, cy = self._ev_xy(e)
         if self._connecting:
@@ -638,9 +641,9 @@ class App(tk.Tk):
             self._connecting = False; self._connect_from = None; self._connect_xy = None
             self._hover_node = None
             if target and target != frm:
-                label = simpledialog.askstring("關係線", "標籤 (可留空，例如 t_su):", parent=self) or ""
+                label = simpledialog.askstring("Relationship Line", "Label (optional, e.g. t_su):", parent=self) or ""
                 self.doc.add_edge(frm, target, label)
-                self.status.configure(text=f" 已建立關係線 {frm} → {target}")
+                self.status.configure(text=f" Created relationship line {frm} -> {target}")
             self.request_render(); return
         if self._selecting:
             a = self._cell_from_xy(*self._press_xy, clamp=True)
@@ -651,11 +654,11 @@ class App(tk.Tk):
                 self._copy_ctx = "cells"
             self._erase_marquee(); self.request_render()
             if self.cell_sel:
-                self.status.configure(text=" 已框選；按元件鍵填入、或 Ctrl+C 複製")
+                self.status.configure(text=" Box-selected; press an element key to fill, or Ctrl+C to copy")
         else:
             if not self._moved and self._press:
                 self._click_cell(*self._press)
-            self.doc.commit()                    # 結算筆刷手勢（無變更則不入 undo 棧）
+            self.doc.commit()                    # finalize the brush gesture (no change means nothing is pushed to the undo stack)
             self.request_render()
 
     def on_wave_menu(self, e):
@@ -663,27 +666,27 @@ class App(tk.Tk):
         m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
         nid = self._node_at_xy(cx, cy)
         if nid:
-            m.add_command(label=f"刪除錨點 {nid}", command=lambda: self._del_node(nid))
+            m.add_command(label=f"Delete anchor {nid}", command=lambda: self._del_node(nid))
         else:
             ei = self._edge_at_xy(cx, cy)
             if ei is not None:
-                m.add_command(label="編輯標籤…", command=lambda: self._edit_edge(ei))
+                m.add_command(label="Edit label...", command=lambda: self._edit_edge(ei))
                 sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
                 cur = self.model.edges[ei].get("style", "double")
-                for sty, lab in (("double", "雙箭頭（量測）"),
-                                 ("single", "單箭頭（因果）"),
-                                 ("measure", "無箭頭（量測線）")):
-                    mark = "● " if sty == cur else "○ "
+                for sty, lab in (("double", "Double arrow (measurement)"),
+                                 ("single", "Single arrow (causal)"),
+                                 ("measure", "No arrow (measurement line)")):
+                    mark = "* " if sty == cur else "o "
                     sub.add_command(label=mark + lab, command=lambda s=sty: self._set_edge_style(ei, s))
-                m.add_cascade(label="箭頭樣式", menu=sub)
-                m.add_command(label="刪除關係線", command=lambda: self._del_edge(ei))
+                m.add_cascade(label="Arrow style", menu=sub)
+                m.add_command(label="Delete relationship line", command=lambda: self._del_edge(ei))
             else:
                 c = self._cell_from_xy(cx, cy)
                 if not c:
                     return
-                m.add_command(label="在此建立錨點", command=lambda: self._add_node_at(cx, cy))
+                m.add_command(label="Create anchor here", command=lambda: self._add_node_at(cx, cy))
                 m.add_separator()
-                m.add_command(label="清成 L",
+                m.add_command(label="Clear to L",
                               command=lambda cc=c: (self.doc.set_cell(cc[0], cc[1], "L"), self.request_render()))
         try:
             m.tk_popup(e.x_root, e.y_root)
@@ -706,30 +709,30 @@ class App(tk.Tk):
             return
         si, p, edge = ce
         nid = self.doc.add_anchor(self.model.signals[si].get("sid"), p, edge)
-        self.request_render(); self.status.configure(text=f" 已建立錨點 {nid}（拖曳錨點可拉關係線；Del 刪除）")
+        self.request_render(); self.status.configure(text=f" Created anchor {nid} (drag an anchor to draw a relationship line; Del to delete)")
 
     def _del_node(self, nid):
         self.doc.remove_anchor(nid)
         if self._hover_node == nid:
             self._hover_node = None
-        self.request_render(); self.status.configure(text=f" 已刪除錨點 {nid}")
+        self.request_render(); self.status.configure(text=f" Deleted anchor {nid}")
 
     def _edit_edge(self, i):
         if 0 <= i < len(self.model.edges):
             cur = self.model.edges[i].get("label", "")
-            new = simpledialog.askstring("關係線標籤", "標籤:", initialvalue=cur, parent=self)
+            new = simpledialog.askstring("Relationship Line Label", "Label:", initialvalue=cur, parent=self)
             if new is not None:
                 self.doc.set_edge_label(i, new); self.request_render()
 
     def _del_edge(self, i):
         if self.doc.remove_edge(i):
             self._hover_edge = None
-            self.request_render(); self.status.configure(text=" 已刪除關係線")
+            self.request_render(); self.status.configure(text=" Deleted relationship line")
 
     def _set_edge_style(self, i, style):
         if self.doc.set_edge_style(i, style):
             self.request_render()
-            self.status.configure(text=f" 關係線樣式：{ {'double':'雙箭頭','single':'單箭頭因果','measure':'無箭頭量測'}[style] }")
+            self.status.configure(text=f" Relationship line style: { {'double':'double arrow','single':'single arrow (causal)','measure':'no-arrow measurement'}[style] }")
 
     def _del_hovered_annot(self):
         if self._is_typing():
@@ -742,7 +745,7 @@ class App(tk.Tk):
     def _paint_cell(self, s, p, t, drag_value=None):
         cells = self.model.signals[s]["cells"]
         if t == "BUS":
-            if cells[p]["type"] == "BUS":           # 原為 BUS -> 保留延續，不覆蓋
+            if cells[p]["type"] == "BUS":           # already BUS -> keep it continuing, don't overwrite
                 return
             if drag_value is not None:
                 text = drag_value
@@ -756,18 +759,18 @@ class App(tk.Tk):
 
     def _click_cell(self, s, p):
         t = self.active_tool
-        if t is None:                                    # 拖曳模式不繪製
+        if t is None:                                    # pan mode does not draw
             return
         cells = self.model.signals[s]["cells"]
-        if t == "BUS" and cells[p]["type"] == "BUS":     # 已是 BUS -> 改值
+        if t == "BUS" and cells[p]["type"] == "BUS":     # already BUS -> edit value
             cur = cells[p].get("text", "")
-            new = simpledialog.askstring("BUS 資料", "輸入資料值:", initialvalue=cur, parent=self)
+            new = simpledialog.askstring("BUS Data", "Enter data value:", initialvalue=cur, parent=self)
             if new is not None:
                 self.doc.set_cell(s, p, "BUS", new)
         else:
             self._paint_cell(s, p, t, self._drag_value)
 
-    # ---- 複製 / 貼上 (波形級 + 訊號級) ----
+    # ---- Copy / paste (waveform-level + signal-level) ----
     @staticmethod
     def _copy_signal(sig):
         return {"name": sig["name"], "offset": sig.get("offset", 0.0),
@@ -781,14 +784,14 @@ class App(tk.Tk):
                 return
             self.clip_signals = [self._copy_signal(self.model.signals[i]) for i in idxs]
             self._clip_kind = "signals"
-            self.status.configure(text=f" 已複製 {len(idxs)} 條訊號；Ctrl+V 貼在選取列之後")
+            self.status.configure(text=f" Copied {len(idxs)} signals; Ctrl+V pastes after the selected row")
         elif self.cell_sel is not None:
             s0, s1, p0, p1 = self.cell_sel
             self.clip = [[{"type": self.model.signals[s]["cells"][p]["type"],
                            "text": self.model.signals[s]["cells"][p].get("text", "")}
                           for p in range(p0, p1 + 1)] for s in range(s0, s1 + 1)]
             self._clip_kind = "cells"
-            self.status.configure(text=f" 已複製 {s1-s0+1}x{p1-p0+1} 波形；移到目標格 Ctrl+V 貼上")
+            self.status.configure(text=f" Copied {s1-s0+1}x{p1-p0+1} waveform; move to the target cell and Ctrl+V to paste")
 
     def do_paste(self):
         if self._clip_kind == "group" and self.clip_group:
@@ -800,25 +803,25 @@ class App(tk.Tk):
             self.selected = newidx[0]
             self.sig_sel = set(newidx); self._sig_anchor = newidx[0]
             self._refresh_offset_field(); self.request_render()
-            self.status.configure(text=f" 已貼上 {len(self.clip_signals)} 條訊號（複本未分組）")
+            self.status.configure(text=f" Pasted {len(self.clip_signals)} signals (copies are ungrouped)")
         elif self._clip_kind == "cells" and self.clip:
             s0, p0 = self._hover or (self.selected, 0)
-            self.doc.begin()                     # 一次貼上 = 一個 undo 單位
+            self.doc.begin()                     # one paste = one undo unit
             while len(self.model.signals) < s0 + len(self.clip):
                 self.doc.add_signal()
             for ds, row in enumerate(self.clip):
                 for dp, c in enumerate(row):
                     self.doc.set_cell(s0 + ds, p0 + dp, c["type"], c.get("text", ""))
             self.doc.commit()
-            self.request_render(); self.status.configure(text=f" 已貼上波形於 訊號{s0} T{p0}")
+            self.request_render(); self.status.configure(text=f" Pasted waveform at signal {s0} T{p0}")
 
-    # ---- 調色 ----
+    # ---- Color ----
     def pick_color(self):
         if not self.model.signals:
             return
         init = self.model.signals[self.selected].get("color") or Style.WAVE
         try:
-            _, hx = colorchooser.askcolor(color=init, parent=self, title="訊號顏色")
+            _, hx = colorchooser.askcolor(color=init, parent=self, title="Signal Color")
         except Exception:
             hx = None
         if hx:
@@ -841,7 +844,7 @@ class App(tk.Tk):
         if self._marquee:
             self.wave_cv.delete(self._marquee); self._marquee = None
 
-    # ---- 名稱欄 (點選 / 拖曳排序) ----
+    # ---- Name column (click to select / drag to reorder) ----
     def on_name_press(self, e):
         self.name_cv.focus_set()
         cy = self.name_cv.canvasy(e.y)
@@ -856,7 +859,7 @@ class App(tk.Tk):
         item, _px, py = self._name_press
         cy = self.name_cv.canvasy(e.y)
         if not self._dragging:
-            if item is None or abs(cy - py) < self.geom.row_h / 2:   # 門檻=列高一半
+            if item is None or abs(cy - py) < self.geom.row_h / 2:   # threshold = half a row height
                 return
             self._dragging = True
             self._drag_kind = "group" if item[0] == "group" else "sig"
@@ -874,12 +877,12 @@ class App(tk.Tk):
                     self.sig_sel = {i for i, s in enumerate(self.model.signals) if s["sid"] == sid}
                     self.selected = next(iter(self.sig_sel), self.selected)
                     self._sig_anchor = self.selected
-                    self.status.configure(text=" 已移動訊號" +
-                                          ("（併入群組）" if tgt["container"] else "（移到頂層）"))
+                    self.status.configure(text=" Moved signal" +
+                                          (" (merged into group)" if tgt["container"] else " (moved to top level)"))
                 else:
                     self.doc.move_group_to(self._drag_ref, tgt["container"], tgt["index"])
-                    self.status.configure(text=" 已移動群組" +
-                                          ("（巢狀為子群組）" if tgt["container"] else "（頂層）"))
+                    self.status.configure(text=" Moved group" +
+                                          (" (nested as a subgroup)" if tgt["container"] else " (top level)"))
             self._dragging = False; self._drop = None; self._drop_target = None
             self._name_press = None
             self._refresh_offset_field(); self.request_render()
@@ -891,7 +894,7 @@ class App(tk.Tk):
         item = self._resolve_row(self.name_cv.canvasy(e.y))
         if item is None:
             return
-        if item[0] == "group":              # 點群組標頭 = 折疊/展開
+        if item[0] == "group":              # clicking a group header = collapse/expand
             self._toggle_group(item[1]); return
         s = item[1]
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
@@ -911,7 +914,7 @@ class App(tk.Tk):
         self._copy_ctx = "signals"
         self._refresh_offset_field(); self.request_render()
 
-    # ---- 拖曳落點解析 (容器 + 插入索引)、容器高亮、插入線 ----
+    # ---- Drop-point resolution (container + insert index), container highlight, insertion line ----
     def _group_visible_span(self, rows, gid):
         r0 = next((r for r, row in enumerate(rows)
                    if row.kind == "group" and row.ref == gid), None)
@@ -924,7 +927,7 @@ class App(tk.Tk):
         return r0, r1
 
     def _child_first_visible_row(self, rows, container_gid, index):
-        """容器 children 第 index 個子節點的首個可見列 (供插入線定位)；index==len 回末端。"""
+        """First visible row of the index-th child of the container's children (for positioning the insertion line); index==len returns the end."""
         children = self.doc.container_children(container_gid) or []
         sid2idx = {s["sid"]: i for i, s in enumerate(self.model.signals)}
         if index < len(children):
@@ -935,7 +938,7 @@ class App(tk.Tk):
             si = sid2idx.get(nd.get("sid"))
             return next((r for r, row in enumerate(rows)
                          if row.kind == "sig" and row.ref == si), None)
-        # index==len：落在容器尾端
+        # index==len: lands at the end of the container
         if container_gid is None:
             return len(rows)
         span = self._group_visible_span(rows, container_gid)
@@ -947,8 +950,8 @@ class App(tk.Tk):
         if not rows:
             self._drop = None; self._drop_target = None; return
         rf = (cy - HH) / RH
-        if rf >= len(rows):                     # 游標在所有列之下：移出到頂層尾端
-            top = self.doc.container_children(None)                # 群組收底時也能拖出成員
+        if rf >= len(rows):                     # cursor below all rows: move out to the end of the top level
+            top = self.doc.container_children(None)                # members can be dragged out even when the group is collapsed
             self._drop_target = {"container": None, "index": len(top), "valid": True}
             self._drop = {"y": HH + len(rows) * RH, "valid": True, "hl": None}
             return
@@ -959,24 +962,24 @@ class App(tk.Tk):
 
         if row.kind == "group":
             gid = row.ref
-            if not lower:                       # 上半：插在此群組之前 (同層、群組的父容器)
+            if not lower:                       # upper half: insert before this group (same level, the group's parent container)
                 pg, _lst, idx = self.doc.locate(
                     lambda nd: nd.get("type") == "group" and nd.get("gid") == gid)
                 container, index, hl = pg, idx, pg
-            else:                               # 下半：放進此群組最前
+            else:                               # lower half: place at the front of this group
                 container, index, hl = gid, 0, gid
-        else:                                   # 訊號列：容器=其直接父，索引=同層位置±半列
+        else:                                   # signal row: container = its direct parent, index = same-level position +/- half a row
             sid = self.model.signals[row.ref]["sid"]
             loc = self.doc.locate(lambda nd: nd.get("type") == "sig" and nd.get("sid") == sid)
             pg, _lst, idx = loc
             container, index, hl = pg, idx + (1 if lower else 0), pg
 
         valid = True
-        if self._drag_kind == "group":          # 防呆：不可移入自己或子孫
+        if self._drag_kind == "group":          # safeguard: cannot move into itself or its descendants
             if container is not None and self.doc.is_self_or_descendant(self._drag_ref, container):
                 valid = False
 
-        # 插入線 y：對齊容器內 index 的首個可見列
+        # insertion line y: align to the first visible row of index within the container
         vr = self._child_first_visible_row(rows, container, index)
         if vr is None:
             vr = r + (1 if lower else 0)
@@ -994,7 +997,7 @@ class App(tk.Tk):
         WW = self.model.n_periods * self.geom.period_w + max_off * self.geom.period_w + 4
         self.name_cv.create_rectangle(0, 0, NW, H, fill="#C2C2C2", stipple="gray50", outline="")
         self.wave_cv.create_rectangle(0, 0, WW, H, fill="#C2C2C2", stipple="gray50", outline="")
-        # 點亮「將落入的容器」：框出該群組整塊
+        # highlight the "container it will drop into": outline the whole group block
         hl = self._drop.get("hl")
         if hl is not None and self._drop.get("valid"):
             span = self._group_visible_span(rows, hl)
@@ -1003,7 +1006,7 @@ class App(tk.Tk):
                 for cv, w in ((self.name_cv, NW), (self.wave_cv, WW)):
                     cv.create_rectangle(1, y0 + 1, w - 1, y1 - 1,
                                         outline=Style.MARQUEE, width=2)
-        # 插入線
+        # insertion line
         y = self._drop["y"]; col = Style.MARQUEE if self._drop["valid"] else "#CC2222"
         self.name_cv.create_line(0, y, NW, y, fill=col, width=3)
         self.wave_cv.create_line(0, y, WW, y, fill=col, width=3)
@@ -1012,60 +1015,60 @@ class App(tk.Tk):
         item = self._resolve_row(self.name_cv.canvasy(e.y))
         if item is None:
             return
-        if item[0] == "group":              # ---- 群組標頭選單 ----
+        if item[0] == "group":              # ---- group header menu ----
             gid = item[1]; meta = self.model.groups.get(gid, {})
             m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-            m.add_command(label=("展開" if meta.get("collapsed") else "折疊"),
+            m.add_command(label=("Expand" if meta.get("collapsed") else "Collapse"),
                           command=lambda: self._toggle_group(gid))
-            m.add_command(label="群組調色…", command=lambda: self._color_group(gid))
-            m.add_command(label="設定群組位移…", command=lambda: self._offset_group(gid))
-            m.add_command(label="重新命名群組…", command=lambda: self._rename_group(gid))
+            m.add_command(label="Group color...", command=lambda: self._color_group(gid))
+            m.add_command(label="Set group offset...", command=lambda: self._offset_group(gid))
+            m.add_command(label="Rename group...", command=lambda: self._rename_group(gid))
             others = [g for g in self.model.groups if g != gid]
             if others:
                 sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
                 for g in others:
                     sub.add_command(label=self.model.groups[g].get("name", g),
                                     command=lambda t=g: self._merge_group_into(gid, t))
-                m.add_cascade(label="合併至群組", menu=sub)
+                m.add_cascade(label="Merge into group", menu=sub)
             m.add_separator()
-            m.add_command(label="複製群組", command=lambda: self._copy_group(gid))
+            m.add_command(label="Copy group", command=lambda: self._copy_group(gid))
             if self.clip_group:
-                m.add_command(label="貼上群組", command=self._paste_group)
+                m.add_command(label="Paste group", command=self._paste_group)
             m.add_separator()
-            m.add_command(label="解散群組（保留成員）", command=lambda: self._dissolve_group(gid))
-            m.add_command(label="刪除群組（含成員）", command=lambda: self._delete_group(gid))
+            m.add_command(label="Dissolve group (keep members)", command=lambda: self._dissolve_group(gid))
+            m.add_command(label="Delete group (with members)", command=lambda: self._delete_group(gid))
             try:
                 m.tk_popup(e.x_root, e.y_root)
             finally:
                 m.grab_release()
             return
-        s = item[1]                          # ---- 訊號選單 ----
+        s = item[1]                          # ---- signal menu ----
         if s not in self.sig_sel:
             self.sig_sel = {s}; self.selected = s; self._sig_anchor = s
             self.request_render()
         self._copy_ctx = "signals"
         n = len(self.sig_sel)
-        scope = f"（{n} 條）" if n > 1 else ""
+        scope = f" ({n} signals)" if n > 1 else ""
         grouped = any(self.model.signals[i].get("group") for i in self.sig_sel
                       if 0 <= i < len(self.model.signals))
         m = tk.Menu(self, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        m.add_command(label=f"調色…{scope}", command=self.pick_color)
-        m.add_command(label=f"清除顏色{scope}", command=self.clear_color)
+        m.add_command(label=f"Color...{scope}", command=self.pick_color)
+        m.add_command(label=f"Clear color{scope}", command=self.clear_color)
         m.add_separator()
-        m.add_command(label=f"設定位移…{scope}", command=self.set_offset_dialog)
+        m.add_command(label=f"Set offset...{scope}", command=self.set_offset_dialog)
         m.add_separator()
-        m.add_command(label=f"建立新群組…{scope}", command=self.group_selected)
+        m.add_command(label=f"Create new group...{scope}", command=self.group_selected)
         if self.model.groups:
             sub = tk.Menu(m, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
             for g, me in self.model.groups.items():
                 sub.add_command(label=me.get("name", g),
                                 command=lambda t=g: self._merge_selected_into(t))
-            m.add_cascade(label=f"合併至群組{scope}", menu=sub)
+            m.add_cascade(label=f"Merge into group{scope}", menu=sub)
         if grouped:
-            m.add_command(label=f"移出群組{scope}", command=self._remove_from_group)
+            m.add_command(label=f"Remove from group{scope}", command=self._remove_from_group)
         m.add_separator()
-        m.add_command(label="重新命名…", command=lambda: self._rename_signal(s))
-        m.add_command(label=f"刪除訊號{scope}", command=self.del_signal)
+        m.add_command(label="Rename...", command=lambda: self._rename_signal(s))
+        m.add_command(label=f"Delete signal{scope}", command=self.del_signal)
         try:
             m.tk_popup(e.x_root, e.y_root)
         finally:
@@ -1073,7 +1076,7 @@ class App(tk.Tk):
 
     def _rename_signal(self, s):
         if 0 <= s < len(self.model.signals):
-            new = simpledialog.askstring("改名", "訊號名稱:",
+            new = simpledialog.askstring("Rename", "Signal name:",
                                          initialvalue=self.model.signals[s]["name"], parent=self)
             if new:
                 self.doc.rename_signal(s, new); self.request_render()
@@ -1087,13 +1090,13 @@ class App(tk.Tk):
         else:
             self._rename_signal(item[1])
 
-    # ---- 群組操作 ----
+    # ---- Group operations ----
     def group_selected(self):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
                       if 0 <= i < len(self.model.signals))
         if not idxs:
             return
-        name = simpledialog.askstring("建立新群組", "群組名稱:", initialvalue="群組", parent=self)
+        name = simpledialog.askstring("Create New Group", "Group name:", initialvalue="Group", parent=self)
         if name is None:
             return
         sids = {self.model.signals[i]["sid"] for i in idxs}
@@ -1103,7 +1106,7 @@ class App(tk.Tk):
             self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
             self.request_render()
             nm = self.model.groups.get(gid, {}).get("name", gid)
-            self.status.configure(text=f" 已建立群組「{nm}」（{len(newidx)} 條）；點標頭可折疊")
+            self.status.configure(text=f" Created group \"{nm}\" ({len(newidx)} signals); click the header to collapse")
 
     def _merge_selected_into(self, target_gid):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
@@ -1116,35 +1119,35 @@ class App(tk.Tk):
         newpos = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
         self.sig_sel = set(newpos); self.selected = newpos[0]; self._sig_anchor = newpos[0]
         self.request_render()
-        self.status.configure(text=f" 已併入群組「{nm}」（{len(newpos)} 條）")
+        self.status.configure(text=f" Merged into group \"{nm}\" ({len(newpos)} signals)")
 
     def _merge_group_into(self, src_gid, target_gid):
         res = self.doc.merge_groups(src_gid, target_gid)
         if res:
             self.request_render()
             self.status.configure(
-                text=f" 已將群組巢狀至「{self.model.groups.get(target_gid, {}).get('name', target_gid)}」")
+                text=f" Nested the group into \"{self.model.groups.get(target_gid, {}).get('name', target_gid)}\"")
         else:
-            self.status.configure(text=" 無法合併（不可移入自己的子群組）")
+            self.status.configure(text=" Cannot merge (cannot move into its own subgroup)")
 
     def _remove_from_group(self):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
                       if 0 <= i < len(self.model.signals))
         moved = self.doc.remove_from_group(idxs)
         self.request_render()
-        self.status.configure(text=(f" 已移出 {moved} 條訊號（顏色回預設）" if moved
-                                    else " 選取的訊號不在任何群組中"))
+        self.status.configure(text=(f" Removed {moved} signals (color reset to default)" if moved
+                                    else " The selected signals are not in any group"))
 
     def _dissolve_group(self, gid):
-        self.doc.ungroup([gid])             # 解散：children 提升一層 (保留巢狀子群組)
+        self.doc.ungroup([gid])             # dissolve: children move up one level (nested subgroups kept)
         self.request_render()
-        self.status.configure(text=" 已解散群組（成員/子群組保留、提升一層）")
+        self.status.configure(text=" Group dissolved (members/subgroups kept, promoted one level)")
 
     def _delete_group(self, gid):
         nm = self.model.groups.get(gid, {}).get("name", gid)
         n = len(self.doc.group_member_indices(gid))
-        if not messagebox.askyesno("刪除群組",
-                                   f"確定刪除群組「{nm}」及其 {n} 條訊號？"):
+        if not messagebox.askyesno("Delete Group",
+                                   f"Delete group \"{nm}\" and its {n} signals?"):
             return
         self.doc.delete_group(gid)
         if self.model.signals:
@@ -1154,20 +1157,20 @@ class App(tk.Tk):
             self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
         self.cell_sel = None; self._hover_node = None; self._hover_edge = None
         self.request_render()
-        self.status.configure(text=f" 已刪除群組「{nm}」及 {n} 條訊號")
+        self.status.configure(text=f" Deleted group \"{nm}\" and {n} signals")
 
     def _offset_group(self, gid):
         members = self.doc.group_member_indices(gid)
         if not members:
             return
         cur = self.model.signals[members[0]].get("offset", 0.0)
-        v = simpledialog.askfloat("群組位移", "位移 (0 ~ 0.95，整組含子群組套用相同值):",
+        v = simpledialog.askfloat("Group Offset", "Offset (0 ~ 0.95, applied to the whole group including subgroups):",
                                   initialvalue=cur, minvalue=0.0, maxvalue=0.95, parent=self)
         if v is None:
             return
         self.doc.set_offset(members, v)
         self.request_render()
-        self.status.configure(text=f" 群組整組位移設為 {round(v,2)}（{len(members)} 條）")
+        self.status.configure(text=f" Group offset set to {round(v,2)} for the whole group ({len(members)} signals)")
 
     def _copy_group(self, gid):
         meta = self.model.groups.get(gid, {})
@@ -1178,7 +1181,7 @@ class App(tk.Tk):
         self.clip_group = {"name": meta.get("name", gid), "color": meta.get("color"),
                            "signals": members}
         self._clip_kind = "group"
-        self.status.configure(text=f" 已複製群組「{self.clip_group['name']}」（{len(members)} 條）；Ctrl+V 貼上")
+        self.status.configure(text=f" Copied group \"{self.clip_group['name']}\" ({len(members)} signals); Ctrl+V to paste")
 
     def _paste_group(self):
         res = self.doc.paste_group(self.clip_group)
@@ -1187,7 +1190,7 @@ class App(tk.Tk):
         gname, newidx = res
         self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
         self.request_render()
-        self.status.configure(text=f" 已貼上群組「{gname}」（{len(newidx)} 條，新群組於底部）")
+        self.status.configure(text=f" Pasted group \"{gname}\" ({len(newidx)} signals, new group at the bottom)")
 
     def _toggle_group(self, gid):
         if self.doc.toggle_group(gid) is not None:
@@ -1196,7 +1199,7 @@ class App(tk.Tk):
     def _rename_group(self, gid):
         meta = self.model.groups.get(gid)
         if meta:
-            new = simpledialog.askstring("群組改名", "群組名稱:",
+            new = simpledialog.askstring("Rename Group", "Group name:",
                                          initialvalue=meta.get("name", gid), parent=self)
             if new:
                 self.doc.rename_group(gid, new); self.request_render()
@@ -1207,7 +1210,7 @@ class App(tk.Tk):
             return
         try:
             _, hx = colorchooser.askcolor(color=meta.get("color") or Style.WAVE,
-                                          parent=self, title="群組顏色")
+                                          parent=self, title="Group Color")
         except Exception:
             hx = None
         if hx:
@@ -1226,7 +1229,7 @@ class App(tk.Tk):
         if not targets:
             return
         if len(targets) > 1 and not messagebox.askyesno(
-                "刪除訊號", f"確定刪除選取的 {len(targets)} 條訊號？"):
+                "Delete Signals", f"Delete the {len(targets)} selected signals?"):
             return
         self.doc.remove_signals(targets)
         if self.model.signals:
@@ -1236,25 +1239,25 @@ class App(tk.Tk):
             self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
         self.cell_sel = None; self._refresh_offset_field(); self.request_render()
 
-    # ---- Undo / Redo（快照式，深度 5；一個手勢 = 一步）----
+    # ---- Undo / Redo (snapshot-based, depth 5; one gesture = one step) ----
     def do_undo(self):
         if self._is_typing():
             return
         if self.doc.undo():
-            self._after_history_jump("已復原")
+            self._after_history_jump("Undone")
         else:
-            self.status.configure(text=" 沒有可復原的步驟")
+            self.status.configure(text=" Nothing to undo")
 
     def do_redo(self):
         if self._is_typing():
             return
         if self.doc.redo():
-            self._after_history_jump("已重做")
+            self._after_history_jump("Redone")
         else:
-            self.status.configure(text=" 沒有可重做的步驟")
+            self.status.configure(text=" Nothing to redo")
 
     def _after_history_jump(self, verb):
-        """undo/redo 後文件已整份置換：夾住選取、清掉指向舊內容的暫態。"""
+        """After undo/redo the document is fully replaced: clamp the selection and clear transients pointing to old content."""
         n = len(self.model.signals)
         self.selected = min(self.selected, n - 1) if n else 0
         self.sig_sel = {self.selected} if n else set()
@@ -1265,10 +1268,10 @@ class App(tk.Tk):
         self.request_render()
         u, r = self.doc.history()
         self.status.configure(
-            text=f" {verb}（可復原 {u}/{self.doc.UNDO_DEPTH}、可重做 {r}）")
+            text=f" {verb} (undo {u}/{self.doc.UNDO_DEPTH}, redo {r})")
 
     def do_new(self):
-        if messagebox.askyesno("新增", "清空目前內容並新建？"):
+        if messagebox.askyesno("New", "Clear the current content and start a new document?"):
             self.doc.new_document()
             self.selected = 0; self.sig_sel = {0}; self._sig_anchor = 0
             self.cell_sel = None; self.clip = None
@@ -1277,16 +1280,16 @@ class App(tk.Tk):
 
     def do_save(self):
         path = filedialog.asksaveasfilename(defaultextension=".json",
-                filetypes=[("波型 JSON", "*.json"), ("所有檔案", "*.*")])
+                filetypes=[("Waveform JSON", "*.json"), ("All Files", "*.*")])
         if not path:
             return
         data = self.model.to_dict(); data["view"] = self.geom.to_dict()
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        messagebox.showinfo("儲存", f"已儲存:\n{path}")
+        messagebox.showinfo("Save", f"Saved:\n{path}")
 
     def do_open(self):
-        path = filedialog.askopenfilename(filetypes=[("波型 JSON", "*.json"), ("所有檔案", "*.*")])
+        path = filedialog.askopenfilename(filetypes=[("Waveform JSON", "*.json"), ("All Files", "*.*")])
         if not path:
             return
         try:
@@ -1306,14 +1309,14 @@ class App(tk.Tk):
             cn, ce = cleared or (0, 0)
             if cn or ce:
                 self.status.configure(
-                    text=f" 已開啟；偵測到無法對應的標注，已清除錨點 {cn}、關係線 {ce}")
+                    text=f" Opened; detected unmappable annotations, removed {cn} anchors and {ce} relationship lines")
         except Exception as ex:
-            messagebox.showerror("開啟失敗", str(ex))
+            messagebox.showerror("Open Failed", str(ex))
 
     def do_export(self):
         path = filedialog.asksaveasfilename(defaultextension=".png",
-                filetypes=[("PNG 圖片", "*.png"), ("SVG 向量圖", "*.svg"),
-                           ("EPS 向量圖", "*.eps"), ("PostScript", "*.ps")])
+                filetypes=[("PNG Image", "*.png"), ("SVG Vector", "*.svg"),
+                           ("EPS Vector", "*.eps"), ("PostScript", "*.ps")])
         if not path:
             return
         rows = self.model.layout()
@@ -1322,90 +1325,90 @@ class App(tk.Tk):
         wave_w = self.model.n_periods * self.geom.period_w + max_off * self.geom.period_w
         lo = path.lower()
         if lo.endswith(".png"):
-            scale = simpledialog.askinteger("PNG 解析度", "倍率 (1~4，越大越清晰):",
+            scale = simpledialog.askinteger("PNG Resolution", "Scale (1~4, higher = sharper):",
                                             initialvalue=2, minvalue=1, maxvalue=4, parent=self)
             if scale is None:
                 return
             try:
                 export_png(self.model, self.geom, path, scale)
-                messagebox.showinfo("匯出", f"已輸出 PNG（{scale}× 解析度）:\n{path}")
+                messagebox.showinfo("Export", f"Exported PNG ({scale}x resolution):\n{path}")
             except ImportError:
-                messagebox.showwarning("匯出",
-                    "PNG 匯出只需要 Pillow（不需要 Ghostscript）。\n請先安裝：\n  pip install pillow")
+                messagebox.showwarning("Export",
+                    "PNG export only needs Pillow (Ghostscript not required).\nPlease install it first:\n  pip install pillow")
             except Exception as ex:
-                messagebox.showerror("匯出失敗", str(ex))
+                messagebox.showerror("Export Failed", str(ex))
         elif lo.endswith(".svg"):
             try:
                 export_svg(self.model, self.geom, path)
-                messagebox.showinfo("匯出", f"已輸出 SVG（向量、可無限縮放）:\n{path}")
+                messagebox.showinfo("Export", f"Exported SVG (vector, infinitely scalable):\n{path}")
             except Exception as ex:
-                messagebox.showerror("匯出失敗", str(ex))
-        else:                                   # EPS / PS：tkinter 內建，無需任何套件
-            sel = self.cell_sel; self.cell_sel = None; self.render()   # postscript 直接快照畫布，須同步重繪
+                messagebox.showerror("Export Failed", str(ex))
+        else:                                   # EPS / PS: built into tkinter, no extra packages needed
+            sel = self.cell_sel; self.cell_sel = None; self.render()   # postscript snapshots the canvas directly, requires a synchronous redraw
             self.wave_cv.postscript(file=path, colormode="color",
                                     x=0, y=0, width=wave_w, height=total_h)
             self.cell_sel = sel; self.render()
-            messagebox.showinfo("匯出", f"已輸出:\n{path}")
+            messagebox.showinfo("Export", f"Exported:\n{path}")
 
 
 
-    # ---- WaveDrom 匯出 (交換格式；顏色/統一斜率視覺不保留，node/edge 可帶過去) ----
+    # ---- WaveDrom export (interchange format; color / uniform-slope visuals are not preserved, nodes/edges carry over) ----
     def do_export_wavedrom(self):
         path = filedialog.asksaveasfilename(
-            title="匯出 WaveDrom JSON", defaultextension=".json",
-            filetypes=[("WaveDrom JSON", "*.json"), ("所有檔案", "*.*")])
+            title="Export WaveDrom JSON", defaultextension=".json",
+            filetypes=[("WaveDrom JSON", "*.json"), ("All Files", "*.*")])
         if not path:
             return
         try:
             export_wavedrom(self.model, path)
-            messagebox.showinfo("匯出 WaveDrom",
-                                f"已輸出 WaveDrom JSON：\n{path}\n\n"
-                                "可貼到 wavedrom.com 或用 wavedrom-cli 算圖。\n"
-                                "註：顏色與統一斜率等視覺由 WaveDrom 自行重畫，不會保留。")
+            messagebox.showinfo("Export WaveDrom",
+                                f"Exported WaveDrom JSON:\n{path}\n\n"
+                                "You can paste it into wavedrom.com or render it with wavedrom-cli.\n"
+                                "Note: visuals such as color and uniform slope are redrawn by WaveDrom and not preserved.")
         except Exception as ex:
-            messagebox.showerror("匯出失敗", str(ex))
+            messagebox.showerror("Export Failed", str(ex))
 
 
     def help_usage(self):
-        messagebox.showinfo("使用說明",
-            "【畫波形】選元件後：點一格畫一格；拖曳沿起始列刷 (鎖列)。\n"
-            "  · BUS：原本是 BUS 的格會保留延續；非 BUS 的格才轉成 BUS。\n"
-            "         再點同格可輸入/修改資料值。\n"
-            "【框選 (畫布)】Shift 或 Ctrl + 拖曳都是純框選：\n"
-            "  · 框選後按元件鍵 = 整塊填入 (BUS 問一次文字)。\n"
-            "  · Ctrl+C 複製、移到目標格 Ctrl+V 貼上 (超出列數自動新增列)。\n"
-            "【名稱欄】點選訊號 (Ctrl/Shift 多選)；按住上下拖曳可移動：\n"
-            "  · 拖到群組標頭下半/群組內 = 併入該群組(游標位置即插入點，合併+排序一次到位)。\n"
-            "  · 拖到群組標頭上半 = 移到該群組之前(同層)；拖到頂層訊號間 = 移出到頂層。\n"
-            "  · 拖群組標頭 = 整組移動，落在另一群組上即巢狀為子群組(不可落入自己子孫)。\n"
-            "  · 拖曳時背景反灰、點亮將落入的容器並顯示插入線。\n"
-            "  · 群組標頭右鍵：折疊/調色/群組位移/複製/合併(巢狀)/解散/刪除(含成員)。\n"
-            "  · 巢狀：訊號右鍵「合併至群組」可放入；群組右鍵「合併至群組」成為子群組。\n"
-            "【標注】波形右鍵 →「在此建立錨點」(吸附到最近的格邊緣)。\n"
-            "  · 游標移到錨點上會高亮；按住錨點拖曳到另一錨點即建立關係線\n"
-            "    (拉線時波形會反灰冷凍，凸顯前景)；放開後輸入標籤 (如 t_su)。\n"
-            "  · 錨點/關係線：游標移上去高亮後按 Del 刪除；關係線右鍵可改標籤/箭頭樣式。\n"
-            "【拖曳模式】按 Esc 退回拖曳模式（取消元件選擇、清除框選）：\n"
-            "  · 左鍵拖曳 = 平移畫布（不會誤畫元件）。\n"
-            "  · Shift/Ctrl + 左鍵拖曳 = 框選（與繪製模式相同）。\n"
-            "  · 點元件鈕或按 1~6 數字鍵即回到繪製模式。\n"
-            "【位移】右移 offset 後左緣自動延伸第一格準位、右端裁齊，呈現延續感。\n"
-            "【匯出】圖片 PNG(1–4×)/SVG(向量)/EPS；另可匯出 WaveDrom JSON 交換格式。\n"
-            "【其他】波形右鍵亦可「清成 L」；雙擊名稱改名；Esc 退回拖曳模式並清除框選。")
+        messagebox.showinfo("Usage",
+            "[Drawing waveforms] After picking an element: click a cell to draw it; drag to brush along the starting row (row-locked).\n"
+            "  - BUS: cells that are already BUS keep continuing; only non-BUS cells become BUS.\n"
+            "         Click the same cell again to enter/edit the data value.\n"
+            "[Box-select (canvas)] Shift or Ctrl + drag is always pure box-select:\n"
+            "  - After selecting, press an element key = fill the block (BUS asks for text once).\n"
+            "  - Ctrl+C to copy; move to the target cell and Ctrl+V to paste (rows are added automatically if you run past the end).\n"
+            "[Name column] Click to select signals (Ctrl/Shift for multi-select); press and drag up/down to move:\n"
+            "  - Drag to the lower half of a group header / inside the group = merge into that group (the cursor position is the insertion point; merge + reorder in one go).\n"
+            "  - Drag to the upper half of a group header = move before that group (same level); drag between top-level signals = move out to the top level.\n"
+            "  - Drag a group header = move the whole group; dropping it on another group nests it as a subgroup (cannot drop into its own descendants).\n"
+            "  - While dragging, the background dims, the target container lights up, and an insertion line is shown.\n"
+            "  - Right-click a group header: collapse/color/group offset/copy/merge (nest)/dissolve/delete (with members).\n"
+            "  - Nesting: a signal's right-click \"Merge into group\" adds it in; a group's right-click \"Merge into group\" makes it a subgroup.\n"
+            "[Annotations] Right-click a waveform -> \"Create anchor here\" (snaps to the nearest cell edge).\n"
+            "  - Hovering over an anchor highlights it; press and drag from an anchor to another anchor to create a relationship line\n"
+            "    (while dragging, the waveform dims and freezes to highlight the foreground); enter a label on release (e.g. t_su).\n"
+            "  - Anchors/relationship lines: hover to highlight, then press Del to delete; right-click a relationship line to change its label/arrow style.\n"
+            "[Pan mode] Press Esc to fall back to pan mode (deselect element, clear box-select):\n"
+            "  - Left-drag = pan the canvas (no accidental drawing).\n"
+            "  - Shift/Ctrl + left-drag = box-select (same as draw mode).\n"
+            "  - Click an element button or press number keys 1~6 to return to draw mode.\n"
+            "[Offset] After shifting offset right, the left edge auto-extends the first cell's level and the right end is trimmed flush, giving a sense of continuity.\n"
+            "[Export] Images PNG (1-4x)/SVG (vector)/EPS; you can also export the WaveDrom JSON interchange format.\n"
+            "[Other] Right-click a waveform also offers \"Clear to L\"; double-click a name to rename; Esc falls back to pan mode and clears box-select.")
 
     def help_keys(self):
-        messagebox.showinfo("快捷鍵",
-            "Ctrl+N/O/S/E 新增/開啟/儲存/匯出   Ctrl+C/V 複製/貼上\n"
-            "Ctrl+Z/Y 復原/重做（最近 5 步；一次筆刷/填入/貼上=一步）\n"
-            "1~6 切換元件 (CLK/H/L/BUS/HiZ/Unknown)\n"
-            "Esc 拖曳模式(取消元件選擇/清除框選)；拖曳模式下左鍵拖曳=平移畫布\n"
-            "Shift/Ctrl+拖曳 框選(兩種模式皆可)   按元件鍵=填入框選\n"
-            "名稱欄 Ctrl/Shift+點擊 多選 -> 右鍵選單(調色/位移/群組/改名/刪除)\n"
-            "波形右鍵 建立錨點/清成L；拖曳錨點拉關係線；Del 刪除標注\n"
-            "雙擊名稱 改名")
+        messagebox.showinfo("Shortcuts",
+            "Ctrl+N/O/S/E New/Open/Save/Export   Ctrl+C/V Copy/Paste\n"
+            "Ctrl+Z/Y Undo/Redo (last 5 steps; one brush/fill/paste = one step)\n"
+            "1~6 Switch element (CLK/H/L/BUS/HiZ/Unknown)\n"
+            "Esc Pan mode (deselect element/clear box-select); in pan mode left-drag = pan canvas\n"
+            "Shift/Ctrl+drag Box-select (works in both modes)   Press an element key = fill the selection\n"
+            "Name column Ctrl/Shift+click for multi-select -> right-click menu (color/offset/group/rename/delete)\n"
+            "Right-click a waveform Create anchor/Clear to L; drag an anchor to draw a relationship line; Del deletes annotations\n"
+            "Double-click a name to rename")
 
     def help_about(self):
-        messagebox.showinfo("關於", f"RetroWave v{__version__}\n數位電路波型繪製工具\nPython + tkinter")
+        messagebox.showinfo("About", f"RetroWave v{__version__}\nDigital circuit waveform editor\nPython + tkinter")
 
 
 def main():

@@ -33,9 +33,9 @@ community traction links as they accumulate.
 - **Quality gates**: 100+ automated tests (unit + GUI-gesture + architecture-boundary)
   run in CI on every tagged release *before* binaries are built —
   <https://github.com/ruiuri0423/retrowave/actions>
-- **Documentation**: language-agnostic design specification
-  (`docs/RetroWave_Design.md`, incl. invariants and a UI↔core protocol) and a
-  code-mapped developer guide (`docs/DEVELOPMENT.md`)
+- **Documentation**: a complete, language-agnostic design specification
+  (`docs/RetroWave_Design.md`) covering the data model, invariants, rendering
+  algorithms, a UI↔core command protocol, and a per-version changelog
 - **License & integrity**: MIT; releases ship `SHA256SUMS.txt`; binaries built only by
   GitHub Actions from public source — <https://github.com/ruiuri0423/retrowave/releases>
 - **Interoperability**: exports the de-facto community WaveDrom JSON format
@@ -44,10 +44,10 @@ community traction links as they accumulate.
 
 ## Outreach checklist (turns assets into reputation)
 
-1. README hero image + animated demo（已就位：`assets/hero.png`、`assets/demo.gif` —
-   兩者都由 RetroWave 自身的匯出管線產生，本身就是產品能力證明）
-2. 發第一個 GitHub Release（含 exe + zip + checksums）
-3. Show HN（"Show HN: RetroWave – a retro-style digital timing diagram editor in pure
-   Python/Tk"）、Reddit r/FPGA、r/Python、EEVblog；把討論串連結補進上面清單
-4. 在 WaveDrom 相關討論/awesome-list 提交互通性條目
-5. 等有 2–3 個外部連結與初步下載數後再送出 SignPath 申請（核准率較高）
+1. README hero image + animated demo (already in place: `assets/hero.png`, `assets/demo.gif` —
+   both produced by RetroWave's own export pipeline, which is itself proof of the product's capability)
+2. Publish the first GitHub Release (including exe + zip + checksums)
+3. Show HN ("Show HN: RetroWave – a retro-style digital timing diagram editor in pure
+   Python/Tk"), Reddit r/FPGA, r/Python, EEVblog; add the thread links to the list above
+4. Submit an interoperability entry to WaveDrom-related discussions / awesome-lists
+5. After accumulating 2–3 external links and some initial download numbers, submit the SignPath application (higher approval rate)

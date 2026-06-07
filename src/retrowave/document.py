@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""傳遞層：UI 與文件核心之間唯一的「寫」通道（設計文件 §14、DEVELOPMENT.md §8）。
+"""Transfer layer: the only "write" channel between the UI and the document core (design spec §14).
 
-職責
-  - 具名命令方法（§14.3 目錄）：shell 對文件的所有變更一律走這裡（R1）；
-    讀路徑（layout/engine/命中測試）依 CQRS 唯讀直通 `doc.model`。
-  - change 事件（§14.4）：成功變更後發 `changed(scopes)`；scheduler 為**注入式**
-    （tk 下傳 `after_idle` 合併派發、測試/headless 傳 None = 同步），本模組不碰 tkinter。
-  - 手勢交易 `begin()/commit()`：一次筆刷/拖曳 = 一個 undo 單位（R5），
-    交易中的命令即時生效、即時發事件，commit 才結算 undo。
-  - 快照式 Undo/Redo（§14.5）：深度 UNDO_DEPTH。
+Responsibilities
+  - Named command methods (§14.3 catalog): all shell changes to the document go through here (R1);
+    read paths (layout/engine/hit testing) pass through to `doc.model` read-only per CQRS.
+  - Change events (§14.4): emit `changed(scopes)` after a successful change; the scheduler is **injected**
+    (under tk, pass `after_idle` for coalesced dispatch; tests/headless pass None = synchronous), this module never touches tkinter.
+  - Gesture transactions `begin()/commit()`: one brush/drag = one undo unit (R5);
+    commands inside a transaction take effect and emit events immediately, undo is settled only at commit.
+  - Snapshot-based Undo/Redo (§14.5): depth UNDO_DEPTH.
 
-錯誤策略（明文化；各命令依此實作）
-  1. 命令成功 → 回傳有意義的值（gid、新索引、筆數、True…）並發 changed 事件。
-  2. 使用者級不合法（移入子孫、空選取、越界、無效把手…）→ 回 False/None/0/[]，
-     不發事件、文件不變（原子）。
-  3. 程式級錯誤（壞檔、不變量破裂）→ 拋例外，絕不吞；load 失敗自動還原。
-  4. 不存在「靜默 no-op」第三態：呼叫者永遠能從回傳值區分做了/沒做。
+Error policy (made explicit; each command is implemented accordingly)
+  1. Command succeeds -> return a meaningful value (gid, new index, count, True...) and emit a changed event.
+  2. User-level invalid (moving into a descendant, empty selection, out of bounds, invalid handle...) -> return False/None/0/[],
+     no event, document unchanged (atomic).
+  3. Program-level error (bad file, broken invariant) -> raise, never swallow; load failure auto-restores.
+  4. There is no "silent no-op" third state: the caller can always tell done/not-done from the return value.
 """
 import copy
 
@@ -23,7 +23,7 @@ from .model import Model
 
 
 def unique_name(name, existing):
-    """撞名時補 _2/_3… 後綴。"""
+    """Append a _2/_3... suffix on name collision."""
     if name not in existing:
         return name
     i = 2
@@ -33,41 +33,41 @@ def unique_name(name, existing):
 
 
 class Document:
-    """命令層 facade。持有 Model（唯一一致性邊界），shell 只透過命令寫入。"""
+    """Command-layer facade. Holds the Model (the sole consistency boundary); the shell writes only through commands."""
 
     UNDO_DEPTH = 5
     SCOPES = ("cells", "structure", "annotations", "document")
 
     def __init__(self, scheduler=None):
         self._model = Model()
-        self._scheduler = scheduler        # callable(fn)；None = 事件同步派發
+        self._scheduler = scheduler        # callable(fn); None = synchronous event dispatch
         self._subs = []
-        self._pending = set()              # 待派發 scopes
+        self._pending = set()              # scopes pending dispatch
         self._flush_queued = False
-        self._undo = []                    # [snapshot]，snapshot = to_dict 深拷貝
+        self._undo = []                    # [snapshot], snapshot = deep copy of to_dict
         self._redo = []
-        self._txn = None                   # 手勢交易起點快照
+        self._txn = None                   # gesture transaction start snapshot
 
-    # ---------------------------------------------------------------- 讀路徑
+    # ---------------------------------------------------------------- read paths
     @property
     def model(self):
-        """CQRS 讀路徑：渲染/版面/命中測試唯讀直通。寫入一律走命令。"""
+        """CQRS read path: render/layout/hit-testing pass through read-only. Writes always go through commands."""
         return self._model
 
     def container_children(self, gid):
-        """讀：容器（None=頂層）的 children 列表（拖曳落點解析用）。"""
+        """Read: the children list of a container (None=top level) (for resolving drag drop targets)."""
         return self._model._container_children(gid)
 
     def locate(self, pred):
-        """讀：以述詞定位樹節點，回 (parent_gid, children, index) 或 None。"""
+        """Read: locate a tree node by predicate, returning (parent_gid, children, index) or None."""
         return self._model._locate(pred)
 
     def is_self_or_descendant(self, gid, other):
-        """讀：other 是否為 gid 自己或其子孫（拖曳防環）。"""
+        """Read: whether other is gid itself or one of its descendants (drag cycle prevention)."""
         return self._model._is_self_or_descendant(gid, other)
 
     def group_member_indices(self, gid):
-        """讀：群組整棵子樹成員在訊號池中的索引（葉序）。群組不存在回 []。"""
+        """Read: indices in the signal pool of all members of a group's entire subtree (leaf order). Returns [] if the group does not exist."""
         node = self._model._find_group_node(gid)
         if node is None:
             return []
@@ -75,9 +75,9 @@ class Document:
         return [sid2idx[l["sid"]] for l in self._model._dfs_leaves([node])
                 if l["sid"] in sid2idx]
 
-    # ---------------------------------------------------------------- 事件
+    # ---------------------------------------------------------------- events
     def subscribe(self, fn):
-        """fn(scopes: set[str])；同一事件迴圈周期內的多個命令合併為一次通知。"""
+        """fn(scopes: set[str]); multiple commands within the same event-loop cycle are coalesced into one notification."""
         self._subs.append(fn)
 
     def _emit(self, scope):
@@ -96,21 +96,21 @@ class Document:
         for fn in list(self._subs):
             fn(set(scopes))
 
-    # ---------------------------------------------------------------- 快照 / 交易 / undo
+    # ---------------------------------------------------------------- snapshot / transaction / undo
     def _snapshot(self):
         return copy.deepcopy(self._model.to_dict())
 
     def _load_snapshot(self, snap):
         m = Model()
-        m.load_dict(copy.deepcopy(snap))   # 深拷貝：棧中快照保持純淨
+        m.load_dict(copy.deepcopy(snap))   # deep copy: snapshots on the stack stay pristine
         self._model = m
 
     def _before(self):
-        """命令開頭呼叫：交易中回 None（commit 才結算 undo），否則回快照。"""
+        """Called at the start of a command: returns None during a transaction (undo settled at commit), otherwise returns a snapshot."""
         return None if self._txn is not None else self._snapshot()
 
     def _mutated(self, scope, before):
-        """成功變更的統一收尾：undo 入棧（交易中除外）＋ 發事件。"""
+        """Unified wrap-up for a successful change: push undo (except during a transaction) + emit event."""
         if before is not None:
             self._push_undo(before)
         self._emit(scope)
@@ -121,12 +121,12 @@ class Document:
         self._redo.clear()
 
     def begin(self):
-        """開始手勢交易（巢狀呼叫安全：只認最外層）。"""
+        """Begin a gesture transaction (nesting-safe: only the outermost is honored)."""
         if self._txn is None:
             self._txn = self._snapshot()
 
     def commit(self):
-        """結束手勢交易；期間若有實際變更，整段成為一個 undo 單位。"""
+        """End the gesture transaction; if there were actual changes, the whole span becomes one undo unit."""
         if self._txn is None:
             return False
         snap, self._txn = self._txn, None
@@ -142,7 +142,7 @@ class Document:
         return bool(self._redo)
 
     def history(self):
-        """讀：(可復原步數, 可重做步數)，供 shell 顯示狀態。"""
+        """Read: (undoable steps, redoable steps), for the shell to display status."""
         return len(self._undo), len(self._redo)
 
     def undo(self):
@@ -156,13 +156,13 @@ class Document:
     def redo(self):
         if self._txn is not None or not self._redo:
             return False
-        self._undo.append(self._snapshot())     # 直接入棧：redo 棧不清空
+        self._undo.append(self._snapshot())     # push directly: don't clear the redo stack
         del self._undo[:-self.UNDO_DEPTH]
         self._load_snapshot(self._redo.pop())
         self._emit("document")
         return True
 
-    # ---------------------------------------------------------------- 命令：cells
+    # ---------------------------------------------------------------- commands: cells
     def set_cell(self, sig, per, t, text=""):
         m = self._model
         if not (0 <= sig < len(m.signals) and 0 <= per < m.n_periods):
@@ -181,7 +181,7 @@ class Document:
         self._mutated("structure", before)
         return True
 
-    # ---------------------------------------------------------------- 命令：訊號
+    # ---------------------------------------------------------------- commands: signals
     def add_signal(self, name=None, fill="L"):
         before = self._before()
         self._model.add_signal(name, fill)
@@ -222,7 +222,7 @@ class Document:
         return len(targets)
 
     def set_color(self, indices, color):
-        """color=None 即清除自訂色。"""
+        """color=None clears the custom color."""
         m = self._model
         targets = [i for i in indices if 0 <= i < len(m.signals)]
         if not targets:
@@ -233,7 +233,7 @@ class Document:
         self._mutated("structure", before)
         return len(targets)
 
-    # ---------------------------------------------------------------- 命令：群組
+    # ---------------------------------------------------------------- commands: groups
     def group_signals(self, indices, name=None):
         before = self._before()
         gid = self._model.group_signals(indices, name)
@@ -326,9 +326,9 @@ class Document:
         self._mutated("structure", before)
         return True
 
-    # ---------------------------------------------------------------- 命令：貼上 / 範本
+    # ---------------------------------------------------------------- commands: paste / templates
     def _adopt_signal(self, payload, names, gid=None):
-        """把剪貼簿/範本的訊號 payload 正規化成新實體（鐵則 2：配發新 sid）。"""
+        """Normalize a clipboard/template signal payload into a new entity (iron rule 2: assign a new sid)."""
         m = self._model
         ns = {"name": unique_name(payload.get("name", "SIG"), names),
               "offset": float(payload.get("offset", 0.0)),
@@ -346,7 +346,7 @@ class Document:
         return [i for i, s in enumerate(self._model.signals) if s["sid"] in sids]
 
     def paste_signals(self, payloads, at_idx=None):
-        """貼上訊號複本（不分組），插在 at_idx 訊號所在頂層位置之後。回傳新索引。"""
+        """Paste signal copies (ungrouped), inserted after the top-level position of the at_idx signal. Return the new indices."""
         m = self._model
         if not payloads:
             return []
@@ -366,7 +366,7 @@ class Document:
         return self._indices_of_sids(set(new_sids))
 
     def _paste_as_group(self, gname_wanted, payloads, color=None):
-        """共用核心：把 payloads 立為新群組（掛在頂層尾端）。回傳 (gname, 新索引)。"""
+        """Shared core: establish payloads as a new group (appended at the top-level end). Return (gname, new indices)."""
         m = self._model
         before = self._before()
         gid = m.new_gid()
@@ -384,19 +384,19 @@ class Document:
         return gname, self._indices_of_sids({c["sid"] for c in children})
 
     def paste_group(self, payload):
-        """貼上整個群組複本。payload = {name, color, signals}。"""
+        """Paste a copy of an entire group. payload = {name, color, signals}."""
         if not payload or not payload.get("signals"):
             return None
-        return self._paste_as_group(payload.get("name", "群組"),
+        return self._paste_as_group(payload.get("name", "Group"),
                                     payload["signals"], payload.get("color"))
 
     def insert_template(self, name, tsignals):
-        """插入範本：訊號立為同名群組。回傳 (群組名, 新索引) 或 None。"""
+        """Insert a template: signals become a group of the same name. Return (group name, new indices) or None."""
         if not tsignals:
             return None
         return self._paste_as_group(name, tsignals, None)
 
-    # ---------------------------------------------------------------- 命令：標注
+    # ---------------------------------------------------------------- commands: annotations
     def add_anchor(self, sid, period, edge):
         m = self._model
         if sid not in {s.get("sid") for s in m.signals}:
@@ -450,7 +450,7 @@ class Document:
         self._mutated("annotations", before)
         return True
 
-    # ---------------------------------------------------------------- 命令：文件
+    # ---------------------------------------------------------------- commands: document
     def new_document(self):
         before = self._before()
         self._model = Model()
@@ -458,12 +458,12 @@ class Document:
         return True
 
     def load_document(self, d):
-        """載入 dict（壞資料拋例外且文件不變）。回傳 (清除錨點數, 清除關係線數)。"""
+        """Load a dict (bad data raises and leaves the document unchanged). Return (anchors cleared, relation lines cleared)."""
         before = self._snapshot()
         try:
             cleared = self._model.load_dict(copy.deepcopy(d))
         except Exception:
-            self._load_snapshot(before)        # 原子：壞檔不留半套
+            self._load_snapshot(before)        # atomic: a bad file leaves nothing half-applied
             raise
         if self._txn is None:
             self._push_undo(before)

@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.28** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.29** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -921,7 +921,7 @@ cell selection), `Shift/Ctrl+drag` (box select).
 
 ### 11.1 Onboarding tutorial (first launch)
 
-A step-by-step overlay shown on first launch (and on demand from *Help → 使用教學*):
+A step-by-step overlay shown on first launch (and on demand from *Help → Interactive tutorial*):
 
 - **Dimming**: a translucent dark layer covers the whole working area; the window stays live
   underneath.
@@ -1114,6 +1114,13 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.29** — **Full English localization of the published tree.** All user-facing UI strings
+  (menus, dialogs, status bar, help, the onboarding tutorial) and every source comment,
+  docstring, and test were translated from Chinese to English; the default group name became
+  `GroupN`. Internal working documents (AI-assistant guide, code-mapped developer guide,
+  cowork workflow) were removed from version control and git-ignored — they remain local-only;
+  all public references to them were redirected to this specification. A repo-wide CJK scan
+  is part of the release checklist.
 - **v1.28** — **Group-header triangle drawn as a vector polygon.** The collapse/expand marker
   was the text glyph ▸/▾, which rendered as a tofu box in PNG exports whenever the chosen
   font lacked those codepoints (e.g. MS JhengHei). The engine now draws the triangle with
@@ -1125,7 +1132,7 @@ changing behaviour, bump the version in three places — the program string, thi
   (true cut-out + clickable on Windows via `-transparentcolor`, ring-only fallback elsewhere),
   6 steps (welcome / toolbar / wave canvas / name column / geometry / shortcuts), Skip ends
   permanently, final step has a default-on "don't show again" checkbox; preference in
-  `~/.retrowave/settings.json`; reopen anytime via *Help → 使用教學*; suppressed in
+  `~/.retrowave/settings.json`; reopen anytime via *Help → Interactive tutorial*; suppressed in
   tests/automation by `RETROWAVE_NO_TUTORIAL`. The tkinter boundary test now allows the shell
   set {app, tutorial, __main__}. (2) GitHub Actions `release.yml`: pushing a `v*` tag runs the
   test suite on windows-latest, builds a PyInstaller **onefile** exe (`RetroWave-vX.Y-windows.exe`,

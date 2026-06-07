@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""文件核心（邏輯單元）：訊號池 + 群組樹 + 標注 + 持久化。
-完全 headless（不得 import tkinter）。設計文件 §2/§5/§10；
-不變量 §2.6 的可執行版本在 tests/conftest.py::assert_invariants。"""
+"""Document core (logic unit): signal pool + group tree + annotations + persistence.
+Fully headless (must not import tkinter). Design spec §2/§5/§10;
+the executable version of the invariants in §2.6 lives in tests/conftest.py::assert_invariants."""
 from collections import namedtuple
 
-# 可見列：kind='group'|'sig'；ref=gid 或 signal index；depth=巢狀深度；gcol=繼承的群組色
+# Visible row: kind='group'|'sig'; ref=gid or signal index; depth=nesting depth; gcol=inherited group color
 Row = namedtuple("Row", "kind ref depth gcol")
 
 DEFAULT_PERIODS = 12
@@ -13,10 +13,10 @@ DEFAULT_PERIODS = 12
 class Model:
     def __init__(self):
         self.n_periods = DEFAULT_PERIODS; self.signals = []
-        self.groups = {}              # gid -> group 節點 (由群組樹重建，供既有程式以 gid 取 meta)
-        self.group_tree = []          # 結構真相：巢狀群組樹 (節點見下)，葉以 sid 參考訊號實體
-        self.nodes = {}               # nid -> {sid, period, edge}  (標注錨點)
-        self.edges = []               # [{frm, to, label, style}]   (關係線)
+        self.groups = {}              # gid -> group node (rebuilt from the group tree, lets existing code fetch meta by gid)
+        self.group_tree = []          # structural truth: nested group tree (nodes below), leaves reference signal entities by sid
+        self.nodes = {}               # nid -> {sid, period, edge}  (annotation anchors)
+        self.edges = []               # [{frm, to, label, style}]   (relation lines)
         self._gid_seq = 0; self._sid_seq = 0
         self.add_signal("CLK", fill="CLK")
         self.add_signal("RST_N", fill="H")
@@ -43,7 +43,7 @@ class Model:
         self.signals.append({"name": name, "offset": 0.0, "color": None, "group": None,
                              "sid": sid,
                              "cells": [self.new_cell(fill) for _ in range(self.n_periods)]})
-        self.group_tree.append({"type": "sig", "sid": sid})   # 新訊號落在頂層 (葉序==signals 序)
+        self.group_tree.append({"type": "sig", "sid": sid})   # new signal lands at top level (leaf order == signals order)
 
     def remove_signal(self, idx):
         if 0 <= idx < len(self.signals):
@@ -67,11 +67,11 @@ class Model:
         if 0 <= sig < len(self.signals) and 0 <= per < self.n_periods:
             self.signals[sig]["cells"][per] = self.new_cell(t, text)
 
-    # ---- 群組 (群組樹為結構真相；signals 維持與 DFS 葉序一致；signal['group']=直接父 gid 快取) ----
+    # ---- groups (the group tree is the structural truth; signals stay consistent with DFS leaf order; signal['group']=cache of direct parent gid) ----
     def layout(self):
-        """遞迴展開群組樹，回傳可見列 Row(kind, ref, depth, gcol)。
-        群組列 ref=gid、gcol=該群自身色；訊號列 ref=signal index、gcol=繼承最近祖先群組色。
-        折疊的群組不展開其 children。"""
+        """Recursively expand the group tree and return visible rows Row(kind, ref, depth, gcol).
+        Group rows: ref=gid, gcol=the group's own color; signal rows: ref=signal index, gcol=inherited from the nearest ancestor group's color.
+        Collapsed groups do not expand their children."""
         rows = []
         sid2idx = {s["sid"]: i for i, s in enumerate(self.signals)}
 
@@ -88,7 +88,7 @@ class Model:
         walk(self.group_tree, 0, None)
         return rows
 
-    # ---- 群組樹的低階操作 ----
+    # ---- low-level group tree operations ----
     def _dfs_leaves(self, nodes=None):
         if nodes is None:
             nodes = self.group_tree
@@ -125,7 +125,7 @@ class Model:
         return None
 
     def _find_leaf_loc(self, sid):
-        """回傳 (children_list, index) 指向該 sid 的葉節點，找不到回 None。"""
+        """Return (children_list, index) pointing to the leaf node for this sid, or None if not found."""
         def rec(nodes):
             for k, nd in enumerate(nodes):
                 if nd.get("type") == "sig" and nd.get("sid") == sid:
@@ -138,7 +138,7 @@ class Model:
         return rec(self.group_tree)
 
     def _locate(self, pred, nodes=None, parent_gid=None):
-        """回傳 (parent_gid, children_list, index)，parent_gid=None 表示頂層。"""
+        """Return (parent_gid, children_list, index); parent_gid=None means top level."""
         if nodes is None:
             nodes = self.group_tree
         for k, nd in enumerate(nodes):
@@ -157,7 +157,7 @@ class Model:
         return node.get("children") if node is not None else None
 
     def _is_self_or_descendant(self, gid, other):
-        """other 是否為 gid 自己或其子孫群組。"""
+        """Whether other is gid itself or one of its descendant groups."""
         if gid == other:
             return True
         node = self._find_group_node(gid)
@@ -166,7 +166,7 @@ class Model:
         return self._find_group_node(other, node.get("children", [])) is not None
 
     def move_leaf_to(self, sid, container_gid, index):
-        """把訊號葉移到指定容器(None=頂層)的 children 指定位置。標記法自動修正索引位移。"""
+        """Move a signal leaf to the given position in the target container's children (None=top level). A marker auto-corrects index shifts."""
         cont = self._container_children(container_gid)
         if cont is None:
             return False
@@ -181,7 +181,7 @@ class Model:
         return True
 
     def move_group_to(self, gid, container_gid, index):
-        """把群組移到指定容器指定位置 (容器為群組則成巢狀)。防呆：不可移入自己或子孫。"""
+        """Move a group to the given position in the target container (nested if the container is a group). Guard: cannot move into itself or its descendants."""
         if self._find_group_node(gid) is None:
             return False
         if container_gid is not None and self._is_self_or_descendant(gid, container_gid):
@@ -233,7 +233,7 @@ class Model:
     def _resync_signals(self):
         order = [nd["sid"] for nd in self._dfs_leaves()]
         present = set(order)
-        for s in self.signals:                  # 保險：樹中遺漏的訊號補回頂層
+        for s in self.signals:                  # safety: signals missing from the tree are added back at top level
             if s["sid"] not in present:
                 self.group_tree.append({"type": "sig", "sid": s["sid"]})
                 order.append(s["sid"]); present.add(s["sid"])
@@ -254,7 +254,7 @@ class Model:
                 else:
                     s = by.get(nd.get("sid"))
                     if s is not None:
-                        s["group"] = parent_gid       # 直接父群組 gid 快取
+                        s["group"] = parent_gid       # cache of direct parent group gid
         rec(self.group_tree, None)
 
     def _after_tree_change(self):
@@ -270,7 +270,7 @@ class Model:
         return gid
 
     def group_signals(self, indices, name=None):
-        """把選取訊號組成一個全新群組 (插在第一個選取者所在的頂層位置)。回傳 gid。"""
+        """Combine the selected signals into a brand-new group (inserted at the top-level position of the first selected one). Return the gid."""
         sids = [self.signals[i]["sid"] for i in indices if 0 <= i < len(self.signals)]
         order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
         sids = sorted(set(sids), key=lambda s: order.get(s, 1 << 30))
@@ -280,14 +280,14 @@ class Model:
         self.group_tree.insert(self._top_index_of_sid(sids[0]), marker)
         children = [c for c in (self._detach_sid(s) for s in sids) if c]
         gid = self.new_gid()
-        node = {"type": "group", "gid": gid, "name": name or f"群組{self._gid_seq}",
+        node = {"type": "group", "gid": gid, "name": name or f"Group{self._gid_seq}",
                 "collapsed": False, "color": None, "children": children}
         self.group_tree[self.group_tree.index(marker)] = node
         self._after_tree_change()
         return gid
 
     def merge_into_group(self, indices, target_gid):
-        """把選取訊號移入指定群組 (附加到該群 children 尾端)。"""
+        """Move the selected signals into the given group (appended to the end of its children)."""
         tgt = self._find_group_node(target_gid)
         if tgt is None:
             return None
@@ -304,13 +304,13 @@ class Model:
         return target_gid
 
     def merge_groups(self, src_gid, target_gid):
-        """把 src 群組整個移入 target 群組成為其子群組 (巢狀)。"""
+        """Move the entire src group into the target group as a sub-group (nested)."""
         if src_gid == target_gid:
             return None
         tgt = self._find_group_node(target_gid)
         if tgt is None:
             return None
-        # 不可把群組移進自己的子孫
+        # cannot move a group into its own descendants
         if self._find_group_node(target_gid, [self._find_group_node(src_gid)] if
                                  self._find_group_node(src_gid) else []):
             return None
@@ -322,7 +322,7 @@ class Model:
         return target_gid
 
     def remove_from_group(self, indices):
-        """把選取的(有群組)訊號移到頂層 (移出所有群組)；移出後色彩回預設。回傳數量。"""
+        """Move the selected (grouped) signals to the top level (out of all groups); their color resets to default. Return the count."""
         sids = [self.signals[i]["sid"] for i in indices
                 if 0 <= i < len(self.signals) and self.signals[i].get("group")]
         order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
@@ -346,7 +346,7 @@ class Model:
         return moved
 
     def ungroup(self, gids):
-        """解散群組：把其 children 就地提升一層 (保留巢狀子群組與成員)。"""
+        """Dissolve groups: promote their children up one level in place (keeping nested sub-groups and members)."""
         gids = set(gids)
 
         def rec(nodes):
@@ -364,7 +364,7 @@ class Model:
         self._after_tree_change()
 
     def delete_group(self, gid):
-        """刪除群組連同其整棵子樹的所有訊號。回傳刪除的訊號數。"""
+        """Delete a group along with all signals in its entire subtree. Return the number of signals deleted."""
         node = self._detach_group(gid)
         if node is None:
             return 0
@@ -378,7 +378,7 @@ class Model:
         self._prune_empty_groups(self.group_tree)
         self._reindex_groups()
 
-    # ---- 標注 (錨點 node + 關係線 edge；獨立層，以 sid 錨定不受重排影響) ----
+    # ---- annotations (anchor node + relation edge; independent layer, anchored by sid so reordering doesn't affect it) ----
     def new_nid(self):
         import string
         for ch in string.ascii_lowercase:
@@ -413,7 +413,7 @@ class Model:
             self.remove_node(nid)
         self.edges = [e for e in self.edges
                       if e["frm"] in self.nodes and e["to"] in self.nodes]
-        return len(orphan_nodes), before_edges - len(self.edges)   # (清除錨點數, 清除關係線數)
+        return len(orphan_nodes), before_edges - len(self.edges)   # (anchors cleared, relation lines cleared)
 
     def to_dict(self):
         return {"version": "2.0", "n_periods": self.n_periods,
@@ -421,7 +421,7 @@ class Model:
                 "nodes": self.nodes, "edges": self.edges}
 
     def _migrate_flat_to_tree(self, gmeta):
-        """舊格式 (signal['group']=gid + groups dict) -> 單層群組樹。"""
+        """Old format (signal['group']=gid + groups dict) -> single-level group tree."""
         self.group_tree = []; i = 0; n = len(self.signals)
         while i < n:
             g = self.signals[i].get("group")
@@ -456,11 +456,11 @@ class Model:
             del cells[self.n_periods:]
             s["cells"] = cells
         gt = d.get("group_tree")
-        if gt is not None:                      # 新格式：直接採用群組樹
+        if gt is not None:                      # new format: use the group tree directly
             self.group_tree = gt
-        else:                                   # 舊格式：扁平群組 -> 樹 (向後相容)
+        else:                                   # old format: flat groups -> tree (backward compatible)
             self._migrate_flat_to_tree(d.get("groups", {}))
-        # 還原 gid 序號 (避免新建群組撞名)
+        # restore the gid sequence number (avoid name collisions for newly created groups)
         self._gid_seq = 0
         for nd in self._all_group_nodes():
             try:
@@ -468,7 +468,7 @@ class Model:
             except ValueError:
                 pass
         self._after_tree_change()
-        return self.prune_annotations()        # (清除錨點數, 清除關係線數)
+        return self.prune_annotations()        # (anchors cleared, relation lines cleared)
 
     def _all_group_nodes(self, nodes=None):
         if nodes is None:

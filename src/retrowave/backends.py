@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""匯出後端（繪圖單元）：以 duck-type 方式實作 Canvas 的 create_* 介面，
-Engine 不需改動即可輸出點陣（PILCanvas，需 Pillow）與向量（SVGCanvas，零依賴）。
-設計文件 §4/§9。"""
+"""Export backends (drawing units): duck-type implementations of the Canvas create_* interface,
+so the Engine can output raster (PILCanvas, needs Pillow) and vector (SVGCanvas, zero dependencies)
+without any changes. Design spec §4/§9."""
 
 
 def _load_pil_fonts(scale=1):
@@ -23,8 +23,9 @@ def _load_pil_fonts(scale=1):
 
 
 class PILCanvas:
-    """最小化的 tkinter Canvas 介面，實際畫到 Pillow ImageDraw。
-    scale 用於高解析匯出：線寬與標注尺寸隨之放大 (座標已由縮放後的 Geometry 提供)。"""
+    """Minimal tkinter Canvas interface that actually draws to a Pillow ImageDraw.
+    scale is used for high-resolution export: line widths and annotation sizes scale up
+    accordingly (coordinates are already supplied by the scaled Geometry)."""
     def __init__(self, draw, fonts, scale=1):
         self.d = draw
         self.fonts = fonts
@@ -64,7 +65,7 @@ class PILCanvas:
         anc = {"center": "mm", "w": "lm", "e": "rm"}.get(anchor, "mm")
         try:
             self.d.text((x, y), str(text), fill=f, font=self._font(font), anchor=anc)
-        except TypeError:                       # 舊版 Pillow 無 anchor 參數
+        except TypeError:                       # older Pillow has no anchor parameter
             self.d.text((x, y), str(text), fill=f, font=self._font(font))
 
     def configure(self, **kw):
@@ -75,8 +76,9 @@ class PILCanvas:
 
 
 class SVGCanvas:
-    """把 tkinter Canvas 介面對應到 SVG 元素 (向量、無限解析度)。
-    多個實例可共用同一個 elements 串列，並用 xoff 水平位移 (名稱欄 / 波形區合成單檔)。"""
+    """Maps the tkinter Canvas interface to SVG elements (vector, infinite resolution).
+    Multiple instances can share the same elements list and use xoff for horizontal offset
+    (composing the name column / waveform area into a single file)."""
     CJK = "'Microsoft JhengHei','PingFang TC','Noto Sans CJK TC','Heiti TC',sans-serif"
 
     def __init__(self, elements, xoff=0):

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""範本庫（邏輯單元）：獨立於專案檔；索引存於 ~/.retrowave/templates_index.json。"""
+"""Template library (logic unit): independent of project files; index stored in ~/.retrowave/templates_index.json."""
 import json
 import os
 
@@ -12,7 +12,7 @@ class TemplateLibrary:
         self.entries = []                      # [{name, path}]
 
     def load(self):
-        """讀索引檔，回傳 (可用清單, 找不到的清單)。找不到的會自動從索引移除。"""
+        """Read the index file and return (available list, missing list). Missing entries are auto-removed from the index."""
         try:
             with open(self.INDEX, encoding="utf-8") as f:
                 items = json.load(f).get("templates", [])
@@ -21,11 +21,11 @@ class TemplateLibrary:
         avail, missing = [], []
         for it in items:
             p = it.get("path")
-            nm = it.get("name") or (os.path.splitext(os.path.basename(p))[0] if p else "範本")
+            nm = it.get("name") or (os.path.splitext(os.path.basename(p))[0] if p else "Template")
             (avail if (p and os.path.isfile(p)) else missing).append({"name": nm, "path": p})
         self.entries = avail
         if missing:
-            self.save()                        # 更新路徑檔，去掉找不到的
+            self.save()                        # update the index file, dropping missing entries
         return avail, missing
 
     def save(self):
@@ -38,7 +38,7 @@ class TemplateLibrary:
             return False
 
     def add(self, name, path):
-        self.entries = [e for e in self.entries if e.get("path") != path]   # 同路徑去重
+        self.entries = [e for e in self.entries if e.get("path") != path]   # dedupe by path
         self.entries.append({"name": name, "path": path}); self.save()
 
     def remove(self, name):

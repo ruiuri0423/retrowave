@@ -10,7 +10,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.28**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.29**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -36,7 +36,7 @@ templates, and export to PNG, SVG or EPS.
   **spotlights** the region it explains (on Windows the highlighted area is fully
   clear *and clickable*, so you can try the gesture immediately). Skip ends it
   permanently; the last step has a "don't show again" checkbox. Reopen anytime via
-  *Help → 使用教學*.
+  *Help → Interactive tutorial*.
 
 **Undo / Redo**
 - `Ctrl+Z` / `Ctrl+Y`, last **5 steps**. One gesture = one step: a whole brush stroke,
@@ -140,7 +140,7 @@ first, PNG export included).
 > a "protected your PC" prompt (More info → Run anyway). Each release ships a
 > `SHA256SUMS.txt` to verify integrity, plus an **onedir zip** variant that trips far
 > fewer antivirus heuristics than the self-extracting onefile. Code signing hooks are
-> already built into the release pipeline (see docs/DEVELOPMENT.md §6.1).
+> already built into the release pipeline (see `.github/workflows/release.yml`).
 
 The window opens with a small demo waveform so you can start experimenting
 immediately — and a short interactive tutorial on first launch.
@@ -149,15 +149,15 @@ immediately — and a short interactive tutorial on first launch.
 
 ## Development & tests
 
-New contributor? Start with **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — it maps every
-section of the design spec ([docs/RetroWave_Design.md](docs/RetroWave_Design.md), which is
-deliberately language-agnostic) to the actual code symbols, lists the seven iron rules with
-their guarding tests, and carries the UI↔core refactoring roadmap.
+New contributor? Start with **[docs/RetroWave_Design.md](docs/RetroWave_Design.md)** — the
+complete, language-agnostic design specification: data model and invariants (§2.6),
+geometry and the unified slope rule (§3), the one-renderer/many-backends architecture (§4–6),
+the UI↔core command protocol (§14), and a changelog tracking every behavior change.
 
 A pytest suite lives under `tests/`:
 
 ```bash
-python -m pytest          # run everything (~50 tests, < 1s)
+python -m pytest          # run everything (100+ tests, ~1s)
 python -m pytest tests/test_model.py -k group   # run a subset
 ```
 
@@ -176,7 +176,7 @@ python -m pytest tests/test_model.py -k group   # run a subset
 - `tests/test_export.py` — headless export tests: SVG structure, exact WaveDrom
   wave strings, PNG pixel dimensions (skipped without Pillow).
 
-Both `python -m pytest` and the `ast.parse` syntax check must pass before a commit.
+Both `python -m pytest` and `python -m compileall -q src` must pass before a commit.
 
 ---
 

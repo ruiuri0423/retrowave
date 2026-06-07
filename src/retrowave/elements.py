@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""波形元件（繪圖單元）：六種元件的繪製演算法，轉換斜率統一 = 擺幅/tw。
-設計文件 §6.3；只畫到 duck-type Canvas，不得 import tkinter。"""
+"""Waveform elements (drawing units): drawing algorithms for six element types, with the
+transition slope unified = swing/tw.
+Design spec §6.3; draws only to a duck-type Canvas, must not import tkinter."""
 from .theme import Style
 
 WAVE_TYPES = ["CLK", "H", "L", "BUS", "HiZ", "Unknown"]
@@ -26,17 +27,17 @@ class LevelElement(Element):
         pe = eng.elem(prev["type"]) if prev else None
         if pe is None:
             cv.create_line(x0, y, x1, y, fill=col, width=W)
-        elif pe.kind == "DATA":                         # 前為 BUS：兩軌道收斂到本準位 (線右側, 統一斜率)
+        elif pe.kind == "DATA":                         # previous is BUS: both tracks converge to this level (right side, unified slope)
             whi = abs(hi - y) * tw / swing; wlo = abs(lo - y) * tw / swing
             xflat = x0 + min(whi, wlo)
             cv.create_line(xflat, y, x1, y, fill=col, width=W)
             if whi > 0.5: cv.create_line(x0, hi, x0 + whi, y, fill=col, width=W)
             if wlo > 0.5: cv.create_line(x0, lo, x0 + wlo, y, fill=col, width=W)
-        elif pe.kind == "CLK":                          # CLK<->LEVEL：直角
+        elif pe.kind == "CLK":                          # CLK<->LEVEL: right angle
             if abs(lo - y) > 0.5:
                 cv.create_line(x0, lo, x0, y, fill=col, width=W)
             cv.create_line(x0, y, x1, y, fill=col, width=W)
-        else:                                           # LEVEL<->LEVEL：統一斜率
+        else:                                           # LEVEL<->LEVEL: unified slope
             py = pe.exit_y(hi, mid, lo); dy = y - py
             if abs(dy) < 0.5:
                 cv.create_line(x0, y, x1, y, fill=col, width=W)
@@ -97,12 +98,12 @@ class BusElement(Element):
         vyL = None
         if sameL:
             xLhi = xLlo = x0
-        elif prevDATA:                                  # 資料變化 X 交叉
+        elif prevDATA:                                  # data change: X crossover
             xm = x0 + tw / 2
             left_lines += [(x0, hi, xm, mid), (x0, lo, xm, mid),
                            (xm, mid, x0 + tw, hi), (xm, mid, x0 + tw, lo)]
             xLhi = xLlo = x0 + tw
-        else:                                           # 由 level/clk/none 開口
+        else:                                           # opening from level/clk/none
             vyL = eng.meet(pt, self.name, hi, mid, lo) or mid
             whi = wl(hi - vyL); wlo = wl(lo - vyL)
             if whi > 0.5: left_lines.append((x0, vyL, x0 + whi, hi))

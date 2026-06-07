@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""繪圖引擎（繪圖單元）：單一繪製流程，畫到任何 duck-type Canvas
-（螢幕 tk.Canvas / PILCanvas / SVGCanvas），不得 import tkinter。設計文件 §4/§6/§7。"""
+"""Drawing engine (drawing unit): a single drawing pipeline that draws to any duck-type Canvas
+(on-screen tk.Canvas / PILCanvas / SVGCanvas), must not import tkinter. Design spec §4/§6/§7."""
 import math
 
 from .elements import (BusElement, ClkElement, HiZElement, HighElement,
@@ -52,24 +52,24 @@ class Engine:
         wave_cv.create_line(grid_w, HH, grid_w, total_h, fill=Style.DASH, dash=(2, 3))
         wave_cv.create_line(0, HH, grid_w, HH, fill=Style.GRID)
 
-        sig_row = {}                       # signal index -> 可見列 (給 cell_sel 高亮)
+        sig_row = {}                       # signal index -> visible row (for cell_sel highlight)
         for r, row in enumerate(rows):
             kind, ref, depth, rgcol = row.kind, row.ref, row.depth, row.gcol
             row_top = HH + r * RH; row_bot = row_top + RH
-            if kind == "group":            # ---- 群組標頭列 (依深度縮排) ----
+            if kind == "group":            # ---- group header row (indented by depth) ----
                 meta = model.groups.get(ref, {})
                 gcol = rgcol
                 gx = 8 + depth * 16
                 gy = (row_top + row_bot) // 2
                 col = gcol or Style.TEXT
                 name_cv.create_rectangle(0, row_top, NW, row_bot, fill=Style.FACE, outline=Style.FACE_DARK)
-                # 折疊三角形以向量多邊形繪製（不依賴字型字符 ▸/▾ 的覆蓋率，
-                # 螢幕與 PNG/SVG 匯出在任何字型環境下都一致）
+                # Draw the collapse triangle as a vector polygon (not relying on font glyph
+                # coverage for ▸/▾, so screen and PNG/SVG export stay consistent in any font environment)
                 ts = 4 * self._scale_of(name_cv)
-                if meta.get("collapsed"):       # 右指（收合）
+                if meta.get("collapsed"):       # pointing right (collapsed)
                     name_cv.create_polygon([gx, gy - ts, gx + ts * 1.6, gy, gx, gy + ts],
                                            fill=col, outline=col)
-                else:                           # 下指（展開）
+                else:                           # pointing down (expanded)
                     name_cv.create_polygon([gx - ts * 0.3, gy - ts * 0.7,
                                             gx + ts * 1.9, gy - ts * 0.7,
                                             gx + ts * 0.8, gy + ts * 0.9],
@@ -81,13 +81,13 @@ class Engine:
                     wave_cv.create_rectangle(0, row_top, grid_w, row_top + 3, fill=gcol, outline="")
                 wave_cv.create_line(0, row_bot, grid_w, row_bot, fill=Style.GRID)
                 continue
-            si = ref; sig = model.signals[si]; sig_row[si] = r    # ---- 訊號列 ----
+            si = ref; sig = model.signals[si]; sig_row[si] = r    # ---- signal row ----
             hi, mid, lo = geom.levels(row_top)
             ox = sig.get("offset", 0.0) * PW
-            gcol = rgcol                       # 繼承自最近祖先群組 (layout 已算好)
-            self._wcol = sig.get("color") or gcol or Style.WAVE   # 自訂色 > 群組色 > 預設
+            gcol = rgcol                       # inherited from nearest ancestor group (already computed by layout)
+            self._wcol = sig.get("color") or gcol or Style.WAVE   # custom color > group color > default
             namecol = sig.get("color") or gcol or Style.TEXT
-            indent = 8 + depth * 16            # 依巢狀深度縮排
+            indent = 8 + depth * 16            # indent by nesting depth
             if si in sig_sel:
                 name_cv.create_rectangle(0, row_top, NW, row_bot, fill=Style.SEL, outline="")
             name_cv.create_rectangle(0, row_top, NW, row_bot,
@@ -103,44 +103,44 @@ class Engine:
                 el = self.elem(cells[p]["type"])
                 if el:
                     el.draw(self, wave_cv, geom, cells[p], pc, nc, p * PW + ox, hi, mid, lo)
-            if ox > 0:                          # 位移虛擬延伸 (純視覺，不入資料)
+            if ox > 0:                          # offset virtual extension (purely visual, not stored in data)
                 f = self.elem(cells[0]["type"])
                 if f is not None:
-                    if f.kind == "DATA":        # BUS/Unknown：左緣收口三角 (斜率=BUS 的 swing/tw)
+                    if f.kind == "DATA":        # BUS/Unknown: left-edge closing triangle (slope = BUS's swing/tw)
                         tw = geom.tw(); swing = lo - hi
-                        half_w = abs(mid - hi) * tw / swing   # 半擺幅水平寬 = tw/2
-                        base_x = ox - half_w    # 收口起點 (沿 BUS 斜率回推半擺幅)
-                        if base_x > 0:          # 三角前若有空間則補平行帶
+                        half_w = abs(mid - hi) * tw / swing   # half-swing horizontal width = tw/2
+                        base_x = ox - half_w    # closing start point (stepped back a half-swing along the BUS slope)
+                        if base_x > 0:          # if there is room before the triangle, fill the parallel band
                             wave_cv.create_line(0, hi, base_x, hi, fill=self._wcol, width=2)
                             wave_cv.create_line(0, lo, base_x, lo, fill=self._wcol, width=2)
                             xh = xl = base_x; yh, yl = hi, lo
-                        else:                   # 回推超出左界 -> 在 x=0 沿斜率裁切
-                            t = (-base_x) / half_w  # 已在畫面外行進的比例
+                        else:                   # step-back exceeds left edge -> clip at x=0 along the slope
+                            t = (-base_x) / half_w  # fraction already traveled off-screen
                             xh = xl = 0.0
                             yh = hi + (mid - hi) * t
                             yl = lo + (mid - lo) * t
                         wave_cv.create_line(xh, yh, ox, mid, fill=self._wcol, width=2)
                         wave_cv.create_line(xl, yl, ox, mid, fill=self._wcol, width=2)
-                    elif f.kind == "CLK":       # 時脈：補靜止低準位
+                    elif f.kind == "CLK":       # clock: fill the idle low level
                         wave_cv.create_line(0, lo, ox, lo, fill=self._wcol, width=2)
-                    else:                       # 單準位：補該準位
+                    else:                       # single level: fill that level
                         y = f.entry_y(hi, mid, lo)
                         if y is not None:
                             wave_cv.create_line(0, y, ox, y, fill=self._wcol, width=2)
                 wave_cv.create_rectangle(grid_w + 1, row_top, grid_w + ox + 2, row_bot,
-                                         fill=Style.CANVAS_BG, outline="")   # 右端裁齊
+                                         fill=Style.CANVAS_BG, outline="")   # trim the right end
 
         if cell_sel:
             s0, s1, p0, p1 = cell_sel
             for s in range(s0, s1 + 1):
-                if s in sig_row:           # 折疊隱藏的列跳過
+                if s in sig_row:           # skip rows hidden by collapse
                     ox = model.signals[s].get("offset", 0.0) * PW
                     y0 = HH + sig_row[s] * RH; y1 = y0 + RH
                     wave_cv.create_rectangle(p0 * PW + ox, y0, (p1 + 1) * PW + ox, y1,
                                              fill=Style.MARQUEE_FILL, stipple="gray12",
                                              outline=Style.MARQUEE, dash=(3, 2), width=1)
 
-        # ---- 標注層：關係線 (在下) + 錨點 (在上) ----
+        # ---- annotation layer: relation lines (below) + anchors (above) ----
         sid2idx = {s.get("sid"): i for i, s in enumerate(model.signals)}
         npos = self.node_positions(model, geom, sig_row, sid2idx)
         for ed in model.edges:
@@ -150,7 +150,7 @@ class Engine:
         for nid, xy in npos.items():
             self.draw_node(wave_cv, nid, xy)
 
-    # ---- 標注繪製 (Engine 與 PILCanvas 共用，匯出一致) ----
+    # ---- annotation drawing (shared by Engine and PILCanvas, consistent on export) ----
     @staticmethod
     def node_positions(model, geom, sig_row, sid2idx):
         HH, RH, PW = geom.header_h, geom.row_h, geom.period_w
@@ -170,7 +170,7 @@ class Engine:
 
     @staticmethod
     def _scale_of(cv):
-        s = getattr(cv, "export_scale", 1)      # 注意：tkinter Canvas 本身有 scale() 方法，故改名避免撞名
+        s = getattr(cv, "export_scale", 1)      # note: tkinter Canvas already has a scale() method, renamed to avoid collision
         return s if isinstance(s, (int, float)) else 1
 
     def draw_node(self, cv, nid, xy, hot=False):
@@ -183,11 +183,11 @@ class Engine:
     def draw_edge(self, cv, a, b, label="", hot=False, style="double"):
         col = Style.MARQUEE if hot else self.ANNOT
         cv.create_line(a[0], a[1], b[0], b[1], fill=col, width=2)
-        if style == "single":                   # 單箭頭：因果 frm -> to
+        if style == "single":                   # single arrow: causal frm -> to
             self._arrow(cv, b, a, col)
-        elif style == "measure":                # 無箭頭：量測線 (兩端短橫標)
+        elif style == "measure":                # no arrow: measurement line (short ticks at both ends)
             self._tick(cv, a, b, col); self._tick(cv, b, a, col)
-        else:                                   # double：雙箭頭 (預設)
+        else:                                   # double: double arrow (default)
             self._arrow(cv, b, a, col); self._arrow(cv, a, b, col)
         if label:
             cv.create_text((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 8 * self._scale_of(cv),
@@ -199,7 +199,7 @@ class Engine:
         L = math.hypot(dx, dy) or 1.0
         ux, uy = dx / L, dy / L
         sc = Engine._scale_of(cv)
-        sz, hw = 11 * sc, 5 * sc                # 箭頭長度 / 半寬 (隨匯出倍率放大)
+        sz, hw = 11 * sc, 5 * sc                # arrow length / half-width (scaled by export factor)
         bx, by = tip[0] - ux * sz, tip[1] - uy * sz
         px, py = -uy, ux
         cv.create_polygon([tip[0], tip[1],
@@ -207,7 +207,7 @@ class Engine:
                            bx - px * hw, by - py * hw], fill=col, outline=col)
 
     @staticmethod
-    def _tick(cv, end, other, col):             # 量測線端點的垂直短橫
+    def _tick(cv, end, other, col):             # vertical short tick at the measurement line endpoint
         dx, dy = other[0] - end[0], other[1] - end[1]
         L = math.hypot(dx, dy) or 1.0
         px, py = -dy / L, dx / L; t = 6 * Engine._scale_of(cv)

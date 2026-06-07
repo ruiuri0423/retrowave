@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""RetroWave - 數位電路波型繪製工具
+"""RetroWave - digital circuit waveform drawing tool
 
-純標準庫 tkinter 的數位時序/波形編輯器（PNG 匯出需 Pillow）。
-套件分層（設計文件 §14）：邏輯單元 (model/templates) 與繪圖單元
-(elements/engine/backends/export) 完全 headless；只有 app 模組 import tkinter。
+A pure standard-library tkinter digital timing/waveform editor (PNG export needs Pillow).
+Package layering (design spec §14): logic units (model/templates) and drawing units
+(elements/engine/backends/export) are fully headless; only the app module imports tkinter.
 """
-__version__ = "1.28"
+__version__ = "1.29"
 
 from .backends import PILCanvas, SVGCanvas
 from .document import Document
@@ -19,7 +19,7 @@ from .theme import Style
 _UI_NAMES = ("App", "make_key_button", "SHIFT_MASK", "CTRL_MASK")
 
 
-def __getattr__(name):              # PEP 562：UI 延遲載入，核心匯入不碰 tkinter
+def __getattr__(name):              # PEP 562: lazy UI loading, core imports never touch tkinter
     if name in _UI_NAMES:
         from . import app
         return getattr(app, name)

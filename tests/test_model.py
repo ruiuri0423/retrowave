@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Model 單元測試：訊號池 + 群組樹 + 標注 + 持久化（不開視窗）。
-每個會變更 Model 的測試最後都跑 §2.6 不變量檢查（conftest.assert_invariants）。"""
+"""Model unit tests: signal pool + group tree + annotations + persistence (no window).
+Every test that mutates the Model ends by running the §2.6 invariant check (conftest.assert_invariants)."""
 import json
 
 import pytest
@@ -9,7 +9,7 @@ import retrowave
 from retrowave import Model
 
 
-# ---------------------------------------------------------------- 基本訊號操作
+# ---------------------------------------------------------------- basic signal ops
 def test_demo_initial_state(model, check):
     assert len(model.signals) == 3
     assert [s["name"] for s in model.signals] == ["CLK", "RST_N", "DATA"]
@@ -71,16 +71,16 @@ def test_set_n_periods_clamps_to_one(model, check):
 def test_set_cell_and_bounds(model, check):
     model.set_cell(0, 0, "H")
     assert model.signals[0]["cells"][0]["type"] == "H"
-    model.set_cell(99, 0, "H")     # 越界皆 no-op
+    model.set_cell(99, 0, "H")     # out of range -> no-op
     model.set_cell(0, 99, "H")
     check(model)
 
 
-# ---------------------------------------------------------------- 群組樹
+# ---------------------------------------------------------------- group tree
 def test_group_signals_creates_group_at_first_member(model, check):
     gid = model.group_signals([1, 2], name="SPI")
     assert gid in model.groups and model.groups[gid]["name"] == "SPI"
-    # 群組插在第一個成員原本的頂層位置：CLK 之後
+    # group is inserted at the first member's original top-level position: after CLK
     assert model.group_tree[0]["sid"] == model.signals[0]["sid"]
     assert model.group_tree[1]["gid"] == gid
     assert [s["group"] for s in model.signals] == [None, gid, gid]
@@ -113,9 +113,9 @@ def test_merge_groups_nests(model, check):
 def test_merge_groups_refuses_self_and_descendant(model, check):
     g1 = model.group_signals([0], name="A")
     g2 = model.group_signals([2], name="B")
-    model.merge_groups(g2, g1)                       # g2 巢於 g1
-    assert model.merge_groups(g1, g1) is None        # 自己
-    assert model.merge_groups(g1, g2) is None        # 子孫
+    model.merge_groups(g2, g1)                       # g2 nested under g1
+    assert model.merge_groups(g1, g1) is None        # self
+    assert model.merge_groups(g1, g2) is None        # descendant
     check(model)
 
 
@@ -129,10 +129,10 @@ def test_move_group_into_own_descendant_refused(model, check):
 
 
 def test_move_leaf_downward_same_container_no_off_by_one(model, check):
-    """鐵則 4 的回歸測試：向下移動使用 marker 法，落點不得偏移。"""
+    """Regression test for rule 4: downward moves use the marker method; the landing spot must not shift."""
     model.add_signal("S3"); model.add_signal("S4")   # CLK RST DATA S3 S4
-    sid = model.signals[0]["sid"]                    # 把 CLK 移到 index 3（S3 之後）
-    assert model.move_leaf_to(sid, None, 4)          # 目標：插在原 S4 前（樹含自己時 index=4）
+    sid = model.signals[0]["sid"]                    # move CLK to index 3 (after S3)
+    assert model.move_leaf_to(sid, None, 4)          # target: before original S4 (index=4 when the tree still contains self)
     assert [s["name"] for s in model.signals] == ["RST_N", "DATA", "S3", "CLK", "S4"]
     check(model)
 
@@ -140,7 +140,7 @@ def test_move_leaf_downward_same_container_no_off_by_one(model, check):
 def test_move_leaf_into_group_at_position(model, check):
     gid = model.group_signals([1, 2], name="G")
     sid = model.signals[0]["sid"]                    # CLK
-    assert model.move_leaf_to(sid, gid, 1)           # 插在群組 children 中間
+    assert model.move_leaf_to(sid, gid, 1)           # insert in the middle of the group's children
     node = model._find_group_node(gid)
     assert [c["sid"] for c in node["children"]][1] == sid
     assert model.signals[[s["sid"] for s in model.signals].index(sid)]["group"] == gid
@@ -159,7 +159,7 @@ def test_remove_from_group_promotes_and_clears_color(model, check):
     assert moved == 1
     s = model.signals[[i for i, x in enumerate(model.signals) if x["name"] == "RST_N"][0]]
     assert s["group"] is None and s["color"] is None
-    assert gid in model.groups                        # 群組仍有 DATA
+    assert gid in model.groups                        # group still has DATA
     check(model)
 
 
@@ -172,11 +172,11 @@ def test_remove_from_group_last_member_prunes_group(model, check):
 
 def test_ungroup_promotes_children_keeps_subgroup(model, check):
     g1 = model.group_signals([1, 2], name="OUT")
-    g2 = model.group_signals([2], name="IN")          # IN 巢於 OUT 內
+    g2 = model.group_signals([2], name="IN")          # IN nested inside OUT
     model.merge_groups(g2, g1)
     model.ungroup([g1])
     assert g1 not in model.groups and g2 in model.groups
-    # IN 升到頂層，RST_N 也回頂層
+    # IN promoted to top level, RST_N back at top level too
     assert model._find_group_node(g2) in model.group_tree
     check(model)
 
@@ -191,13 +191,13 @@ def test_delete_group_removes_subtree_and_annotations(model, check):
     assert deleted == 2
     assert [s["name"] for s in model.signals] == ["CLK"]
     assert nid not in model.nodes and len(model.edges) == 0
-    assert n2 in model.nodes                          # 錨在倖存訊號的錨點要保留
+    assert n2 in model.nodes                          # anchor on the surviving signal must be kept
     check(model)
 
 
 def test_new_gid_skips_existing(model, check):
     g1 = model.group_signals([0], name="A")
-    model._gid_seq = 0                                # 故意重置，模擬載檔後撞號
+    model._gid_seq = 0                                # deliberate reset, simulating a post-load id clash
     g2 = model.group_signals([1], name="B")
     assert g1 != g2
     check(model)
@@ -229,16 +229,16 @@ def test_layout_color_inheritance_nearest_ancestor_wins(model):
     model.groups[inner]["color"] = "#00FF00"
     rows = {(r.kind, r.ref): r for r in model.layout()}
     idx = {s["name"]: i for i, s in enumerate(model.signals)}
-    assert rows[("sig", idx["RST_N"])].gcol == "#0000FF"   # 直接在 OUT 下
-    assert rows[("sig", idx["DATA"])].gcol == "#00FF00"    # IN 較近，勝出
+    assert rows[("sig", idx["RST_N"])].gcol == "#0000FF"   # directly under OUT
+    assert rows[("sig", idx["DATA"])].gcol == "#00FF00"    # IN is nearer, wins
 
 
-# ---------------------------------------------------------------- 標注
+# ---------------------------------------------------------------- annotations
 def test_add_node_and_edge_validation(model, check):
     a = model.add_node(model.signals[0]["sid"], 1, "start")
     b = model.add_node(model.signals[1]["sid"], 3, "end")
-    assert model.add_edge(a, a) is None               # 自迴圈
-    assert model.add_edge(a, "zz") is None            # 不存在端點
+    assert model.add_edge(a, a) is None               # self-loop
+    assert model.add_edge(a, "zz") is None            # non-existent endpoint
     e = model.add_edge(a, b, "t_su", "single")
     assert e in model.edges
     check(model)
@@ -268,17 +268,17 @@ def test_nid_allocation_exhausts_singles(model):
     for _ in range(26):
         model.add_node(model.signals[0]["sid"], 0, "start")
     nid = model.add_node(model.signals[0]["sid"], 0, "start")
-    assert nid == "aa"                                # 單字母用完 -> 雙字母
+    assert nid == "aa"                                # single letters exhausted -> double letters
 
 
-# ---------------------------------------------------------------- 持久化
+# ---------------------------------------------------------------- persistence
 def test_roundtrip_preserves_structure(model, check):
     gid = model.group_signals([1, 2], name="SPI")
     model.groups[gid]["color"] = "#2266CC"
     a = model.add_node(model.signals[1]["sid"], 2, "mid")
     b = model.add_node(model.signals[2]["sid"], 5, "start")
     model.add_edge(a, b, "t_h")
-    blob = json.loads(json.dumps(model.to_dict()))    # 經過真實 JSON 序列化
+    blob = json.loads(json.dumps(model.to_dict()))    # through real JSON serialization
 
     m2 = Model()
     m2.load_dict(blob)
@@ -295,7 +295,7 @@ def test_load_restores_sid_seq_no_collision(model, check):
     m2.load_dict(json.loads(json.dumps(blob)))
     existing = {s["sid"] for s in m2.signals}
     m2.add_signal("NEW")
-    assert m2.signals[-1]["sid"] not in existing      # 載檔後新 sid 不得撞號
+    assert m2.signals[-1]["sid"] not in existing      # new sid after load must not clash
     check(m2)
 
 
@@ -311,7 +311,7 @@ def test_load_legacy_flat_format_migrates(check):
     assert set(m.groups) == {"g1"}
     assert m.groups["g1"]["name"] == "BUS_GRP"
     assert [s.get("group") for s in m.signals] == [None, "g1", "g1"]
-    assert all(s["sid"] for s in m.signals)           # 舊檔無 sid -> 自動補發
+    assert all(s["sid"] for s in m.signals)           # legacy files have no sid -> auto-assigned
     check(m)
 
 
@@ -326,12 +326,12 @@ def test_load_pads_and_truncates_cells(check):
 
 
 def test_load_tree_missing_leaf_repaired(check):
-    """樹漏列訊號時 _resync_signals 要補回頂層（§2.6 保險條款）。"""
+    """When the tree omits a signal, _resync_signals must add it back at top level (§2.6 safeguard)."""
     m = Model()
     m.load_dict({"n_periods": 4,
                  "signals": [{"name": "A", "sid": 1, "cells": [{"type": "L", "text": ""}] * 4},
                              {"name": "B", "sid": 2, "cells": [{"type": "L", "text": ""}] * 4}],
-                 "group_tree": [{"type": "sig", "sid": 1}]})   # 漏了 sid=2
+                 "group_tree": [{"type": "sig", "sid": 1}]})   # sid=2 omitted
     assert [s["sid"] for s in m.signals] == [nd["sid"] for nd in m._dfs_leaves()]
     assert len(m.signals) == 2
     check(m)

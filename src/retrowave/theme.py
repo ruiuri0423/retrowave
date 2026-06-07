@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""佈景主題：Windows 95/XP 米白風格的顏色與字型常數（共用底層，零依賴）。"""
+"""Theme: Windows 95/XP beige-style color and font constants (shared foundation, zero dependencies)."""
 
 
 class Style:

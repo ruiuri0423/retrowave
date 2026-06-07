@@ -1,14 +1,17 @@
 name: Release (Windows onefile)
 
-# 觸發：推 v* 標籤（例 v1.27）自動建置並發佈 Release；也可手動觸發只取 artifact。
+# Trigger: pushing a v* tag (e.g. v1.27) automatically builds and publishes a Release;
+# can also be triggered manually to only produce the artifact.
 #
-# 防毒/SmartScreen 緩解（詳見 docs/DEVELOPMENT.md「發佈與簽章」）：
-#   - 嵌入版本資訊中繼資料（無中繼資料是啟發式扣分項）、--noupx
-#   - 同步產出 onedir zip（不自解壓，誤判率遠低於 onefile）與 SHA256 校驗檔
-#   - 程式碼簽章為「預留位」：設定 repo secrets CODESIGN_PFX_BASE64 與
-#     CODESIGN_PFX_PASSWORD 後自動以 signtool 簽章（含時間戳記）；
-#     未設定則跳過。憑證需向 CA 申請（SignPath 開源免費 / Azure Trusted
-#     Signing / OV / EV），無法自行生成 — 自簽憑證對 SmartScreen 無效。
+# Antivirus/SmartScreen mitigations:
+#   - embed version-info metadata (missing metadata is a heuristic penalty), --noupx
+#   - also produce an onedir zip (no self-extraction, far lower false-positive rate than
+#     onefile) and a SHA256 checksum file
+#   - code signing is a "placeholder": after setting repo secrets CODESIGN_PFX_BASE64 and
+#     CODESIGN_PFX_PASSWORD, it automatically signs with signtool (including a timestamp);
+#     if unset, it is skipped. A certificate must be obtained from a CA (SignPath is free for
+#     open source / Azure Trusted Signing / OV / EV); it cannot be self-generated — a
+#     self-signed certificate is useless against SmartScreen.
 
 on:
   push:
@@ -19,7 +22,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write          # 建立 Release 需要
+      contents: write          # required to create a Release
     env:
       HAS_CERT: ${{ secrets.CODESIGN_PFX_BASE64 != '' }}
 

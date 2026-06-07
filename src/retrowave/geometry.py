@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""幾何參數：週期寬/列高/統一斜率比與座標換算（共用底層，零依賴）。
-設計文件 §2.5/§3；copy_scaled 供高解析匯出。"""
+"""Geometry parameters: period width / row height / unified slope ratio and coordinate
+conversion (shared foundation, zero dependencies).
+Design spec §2.5/§3; copy_scaled supports high-resolution export."""
 
 
 class Geometry:
@@ -29,7 +30,7 @@ class Geometry:
         self.level_lo = float(d.get("level_lo", self.level_lo))
 
     def copy_scaled(self, k):
-        """回傳一份座標等比放大 k 倍的幾何 (比例欄位不變)；供高解析點陣匯出。"""
+        """Return a geometry with coordinates scaled up by k (ratio fields unchanged); for high-resolution raster export."""
         g = Geometry()
         g.period_w = int(round(self.period_w * k)); g.row_h = int(round(self.row_h * k))
         g.header_h = int(round(self.header_h * k)); g.name_w = int(round(self.name_w * k))

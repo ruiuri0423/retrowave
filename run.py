@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""RetroWave 啟動器：python run.py（等同 cd src && python -m retrowave）"""
+"""RetroWave launcher: python run.py (equivalent to cd src && python -m retrowave)"""
 import os
 import sys
 

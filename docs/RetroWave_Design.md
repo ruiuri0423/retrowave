@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.23** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.24** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -988,11 +988,14 @@ interaction layer separately since its branches are event-driven.
 
 ## 14. UI ↔ Core protocol
 
-> **Status: design adopted (2026-06-07); implementation phased in.** Today's code still couples
-> the UI shell directly to the document (the violation inventory and migration roadmap live in
-> `docs/DEVELOPMENT.md`). New code MUST follow this protocol; existing call sites migrate per
-> the roadmap. This section is the contract — it stays language-agnostic on purpose, so the
-> same core can serve a tkinter shell today and an SVG/web shell (§12) tomorrow.
+> **Status: implemented (v1.24).** The transfer layer exists as the `Document` facade: every
+> shell mutation routes through named commands; change events flow back through an injected
+> scheduler; gestures are transactions; snapshot undo/redo rides the command boundary
+> (§14.5; depth 5). A boundary test forbids the shell from touching document internals.
+> This section is the contract — it stays language-agnostic on purpose, so the same core can
+> serve a tkinter shell today and an SVG/web shell (§12) tomorrow. Known deviation: command
+> arguments use pool indices where the shell's selection is index-based (pool order == visual
+> order makes them stable within one gesture); sid-only identity remains the long-term goal.
 
 ### 14.1 The two sides
 
@@ -1084,6 +1087,18 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.24** — **Transfer layer (§14 implemented; no user-visible behaviour change).** New
+  `document.py`: a `Document` facade owning the `Model`. All ~30 shell mutation sites now go
+  through named commands (cells / signals / groups / paste / template / annotations /
+  new / load); the shell reads via the `model` property (CQRS) and four read helpers for drag
+  drop-resolution. Change events `changed(scopes)` dispatch through an **injected scheduler**
+  (tk `after_idle` in the app, synchronous in tests) with coalescing; render is now also
+  event-driven. Gesture transactions `begin()/commit()` make one brush stroke / fill / paste a
+  single undo unit. The four-rule error strategy is documented in the module docstring and
+  pinned by tests (invalid → False/None/0 + no event + atomic; bad load restores and raises).
+  Snapshot undo/redo (depth 5) is built into the command throat (UI bindings arrive in v1.25).
+  Guards: `test_document.py` (19 tests) + boundary test forbidding `model._*`, direct
+  structure writes, and Model mutation calls inside `app.py`.
 - **v1.23** — **Export pipeline extracted (internal; no behaviour change).** PNG / SVG /
   WaveDrom exports moved out of the UI shell into `export.py` as pure functions
   (`export_png(model, geom, path, scale)`, `svg_string`/`export_svg`,

@@ -5,9 +5,10 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.23**. A small Python package (`src/retrowave/`) with strict
-> layering — logic and drawing modules are fully headless; only `app.py` touches tkinter.
-> No third-party dependencies required to run (Pillow is optional, only for PNG export).
+> Status: prototype **v1.24**. A small Python package (`src/retrowave/`) with strict
+> three-tier layering — logic (`model`), transfer (`document`: commands, change events,
+> undo), and application (headless drawing + a tkinter shell); only `app.py` touches
+> tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
 
 ---
 

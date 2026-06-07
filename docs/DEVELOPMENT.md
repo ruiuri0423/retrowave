@@ -34,6 +34,7 @@ src/retrowave/
 ├── engine.py      Engine                   繪圖單元（單一繪製流程）
 ├── backends.py    PILCanvas, SVGCanvas     繪圖單元（PNG/SVG 匯出後端）
 ├── export.py      export_png/svg/wavedrom  繪圖單元（匯出管線，純函式）
+├── document.py    Document                 傳遞層（命令/事件/交易/undo；§8）
 ├── app.py         App, make_key_button     UI 殼層（唯一 tkinter 使用者）
 ├── __init__.py    __version__ + re-export（UI 名稱 PEP 562 延遲載入）
 └── __main__.py    python -m retrowave
@@ -94,16 +95,19 @@ src/retrowave/
 
 ## 5. UI ↔ Core 切分現況（protocol 違規清單）
 
-設計文件 §14 已定義 protocol（R1–R5）。**目前程式尚未遵守**，已知違規（重構時逐一消除）：
+設計文件 §14 的 protocol（R1–R5）已於 **v1.24 實作完成**，下表違規全數消除
+（守門：`test_module_boundaries.py::test_app_writes_only_via_document`）：
 
-| 違規點 | 行為 | 違反 |
-|---|---|---|
-| `App.do_paste`（訊號貼上） | 直接 `model.signals.append` + `group_tree.insert` + `_new_sid` + `_after_tree_change` | R1 |
-| `App._insert_template` | 同上手法繞過所有封裝 | R1 |
-| `App._paste_group` | 直接組樹節點 | R1 |
-| 各互動 handler | 變更後自行呼叫 `request_render()`（核心不發事件，靠 UI 記得重繪） | R2/事件缺失 |
-| 群組選單操作 | 直接改 `model.groups[gid]["collapsed"/"color"/"name"]` | R1 |
-| `set_cell` 粒度 | 一次筆刷 = N 次 `set_cell`（無 stroke 級命令） | R5 |
+| 原違規點 | 解法 |
+|---|---|
+| `App.do_paste`（訊號貼上）直接操作池/樹 | → `doc.paste_signals()`（複本配新 sid 的邏輯移入 Document） |
+| `App._insert_template` / `_paste_group` | → `doc.insert_template()` / `doc.paste_group()`（共用 `_paste_as_group`） |
+| 核心不發事件、靠 UI 記得重繪 | → `doc.subscribe()` + `changed(scopes)`；render 已事件驅動（互動點殘留的 `request_render` 為無害冗餘，合併機制吸收） |
+| 群組選單直接改 `groups[gid][...]` | → `toggle_group` / `set_group_color` / `rename_group` 命令 |
+| 一次筆刷 = N 次散裝 `set_cell` | → `begin()/commit()` 手勢交易（一手勢 = 一 undo 單位） |
+
+殘留偏差（記錄於設計文件 §14 狀態註）：命令引數沿用池索引（選取是 shell 的索引暫態；
+池序==視覺序保證單一手勢內穩定）；sid-only 識別為長期目標。
 
 ## 6. 重構路線圖（依 §14 protocol 重塑架構）
 
@@ -114,7 +118,7 @@ src/retrowave/
 | **v1.22** ✅ | **套件拆分**：`src/retrowave.py` → `src/retrowave/` 套件（`model` / `elements` / `engine` / `backends` / `templates` / `geometry` / `theme` / `app`），行為零變更 | 既有測試原樣全綠 + `test_module_boundaries.py`（headless 子行程鐵證、AST 禁 tkinter、re-export 完整、版本單一來源） |
 | **v1.23** ✅ | **匯出抽離**：`_export_png/svg/wavedrom` → `export.py` 純函式 `(model, geom) → file` | `test_export.py`（SVG 結構/虛線/位移寬度、WaveDrom 波形字串/巢狀群組/phase/edge、PNG 2× 尺寸） |
 | **v1.24 前置** ✅ | **Model 函式分類**（不拆類 — 評估結論：現階段單一 Model 已足夠靈活，先以 §7 分類表明確化各 function 性質與修改風險） | §7 分類表與程式碼一致 |
-| **v1.24** | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規（三層架構見 §8） | 邊界測試：App 原始碼不得出現 `model._` 與直接結構操作；命令層 headless 測試 |
+| **v1.24** ✅ | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規（三層架構見 §8） | `test_document.py`（19 tests：命令/事件合併/錯誤策略/交易/undo 基建）+ 邊界測試禁 app 私有存取 |
 | **v1.25** | **Undo/Redo**：快照式（§14.5），`Ctrl+Z/Y` | 手勢級 undo 測試（一次筆刷 = 一步） |
 | 後續 | 增量重繪（dirty rows，靠 §14.4 scope）、App controller 拆分、VCD import | — |
 
@@ -209,7 +213,7 @@ src/retrowave/
 
 ## 8. 三層架構目標圖（v1.24 討論基礎）
 
-> 狀態：設計定案、待討論後實施。對應設計文件 §14（語言無關契約）；本節是程式碼層面的落地圖。
+> 狀態：**v1.24 已實施**（`document.py`）。對應設計文件 §14（語言無關契約）；本節是程式碼層面的落地圖。
 
 ```
 ╔═ 應用層 ═══════════════════════════════════════════════════╗

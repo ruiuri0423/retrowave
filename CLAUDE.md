@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-RetroWave is a digital timing/waveform editor (Win95/XP retro look) implemented as the `src/retrowave/` package, using only the standard library `tkinter`. Pillow is optional and only needed for PNG export. Strict layering (spec §14): `theme`/`geometry` (shared base), `model`/`templates` (logic), `elements`/`engine`/`backends` (drawing), `app` (UI shell). **Only `app.py` may import tkinter** — `tests/test_module_boundaries.py` enforces this; everything else is headless-importable.
+RetroWave is a digital timing/waveform editor (Win95/XP retro look) implemented as the `src/retrowave/` package, using only the standard library `tkinter`. Pillow is optional and only needed for PNG export. Strict three-tier layering (spec §14, DEVELOPMENT.md §8): `theme`/`geometry` (shared base), `model`/`templates` (logic), **`document` (transfer layer: named commands, change events via injected scheduler, gesture transactions, snapshot undo/redo depth 5)**, `elements`/`engine`/`backends`/`export` (drawing), `app` (UI shell). **Only `app.py` may import tkinter**, and **`app.py` must mutate the document only through `self.doc` commands** (reads go direct via the `model` property — CQRS) — `tests/test_module_boundaries.py` enforces both.
 
 ## Commands
 

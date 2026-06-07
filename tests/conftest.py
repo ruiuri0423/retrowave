@@ -102,7 +102,8 @@ def _root():
 def app(_root):
     """每個測試前把共用 App 重置回 __init__ 後的乾淨狀態。"""
     a = _root
-    a.model = retrowave.Model()
+    a.doc = retrowave.Document(scheduler=a.after_idle)
+    a.doc.subscribe(a._on_doc_changed)
     a.selected = 0; a.sig_sel = {0}; a._sig_anchor = 0
     a.cell_sel = None; a.clip = None; a.clip_signals = None; a.clip_group = None
     a._clip_kind = None; a._copy_ctx = "cells"

@@ -10,7 +10,7 @@ import retrowave
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 CORE_MODULES = ["theme", "geometry", "model", "elements", "engine", "backends",
-                "templates", "export"]
+                "templates", "export", "document"]
 
 
 def test_core_and_drawing_modules_are_headless():
@@ -53,6 +53,24 @@ def test_public_api_reexported():
                  "PILCanvas", "SVGCanvas", "TemplateLibrary", "WAVE_TYPES",
                  "App", "make_key_button", "SHIFT_MASK", "CTRL_MASK", "__version__"):
         assert hasattr(retrowave, name), f"retrowave.{name} 遺失"
+
+
+def test_app_writes_only_via_document():
+    """R1 守門：shell 不得私有存取 Model、不得直接操作文件結構（§14 / DEVELOPMENT §8）。"""
+    pkg_dir = os.path.dirname(retrowave.__file__)
+    src = open(os.path.join(pkg_dir, "app.py"), encoding="utf-8").read()
+    import re
+    forbidden = [
+        (r"self\.model\._", "私有存取 model._*"),
+        (r"self\.model\s*=", "直接替換 model（應走 doc.new_document/load_document）"),
+        (r"\.group_tree\.(insert|append|remove)", "直接操作群組樹"),
+        (r"\.signals\.append", "直接操作訊號池"),
+        (r"_after_tree_change|_new_sid\(", "呼叫 Model 私有對帳/發號"),
+        (r"self\.model\.set_cell|self\.model\.add_signal\(|self\.model\.remove_signal",
+         "繞過命令層直呼 Model 變更方法"),
+    ]
+    for pat, why in forbidden:
+        assert not re.search(pat, src), f"app.py 違反 R1：{why}（pattern: {pat}）"
 
 
 def test_version_single_source():

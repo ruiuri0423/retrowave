@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.18** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
+**Spec version: v1.19** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#14-changelog) at the end.
 
@@ -621,7 +621,16 @@ the tool, and enters pan mode in one press. The cursor switches to a move/fleur 
 status bar announces the mode.
 
 While in pan mode:
-- **Left-drag** pans the canvas in both axes (the name column follows vertically).
+- **Left-drag** pans the canvas in both axes (the name column follows vertically). Panning is
+  implemented with fraction-based `xview_moveto`/`yview_moveto` anchored at the press point —
+  **not** tk's `scan_mark`/`scan_dragto`, which ignore the scrollregion. An explicit
+  per-axis gate `_scrollable()` compares the scrollregion size against the visible window
+  size: when the content does not exceed the window on an axis, that axis is **forced to
+  origin (fraction 0)** instead of panned — `moveto`'s own clamping is *not* relied upon.
+  The same gate is applied to the mouse wheel and the vertical scrollbar callback, and
+  `render()` snaps the view back to origin when content shrinks below the window size
+  (row deletion, group collapse). The name column is always synced from the wave canvas's
+  *post-clamp* y-fraction so the two panes can never drift apart.
 - **Shift/Ctrl + left-drag** still performs BOX-SELECT, exactly as in paint mode; with a
   selection active, element keys fill the block as usual (filling does not leave pan mode).
 - A plain left click never paints, never starts a CONNECT drag, and keeps the current
@@ -975,6 +984,16 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.19** — **Pan clamping & name-column sync fix.** Pan-mode dragging now moves the view with
+  `xview_moveto`/`yview_moveto` (fraction-based, anchored at the press point) instead of
+  `scan_mark`/`scan_dragto`. tk's *scan* API ignores the scrollregion, so the canvas could be
+  dragged vertically even when the content fit the window, and once the origin left the
+  scrollregion the name column's clamped `yview_moveto` no longer matched the wave canvas
+  (vertical desync). A new explicit per-axis gate `_scrollable()` (content size vs. visible
+  window size) forces an axis to fraction 0 when the content fits — applied to pan drag, the
+  mouse wheel, and the scrollbar callback alike — and `render()` snaps the view back to origin
+  when content shrinks below the window. The name column is synced from the post-clamp
+  y-fraction, keeping the two canvases identical.
 - **v1.18** — **Pan mode (tool = none)** to stop accidental painting while navigating: `Escape`
   from any state (tool active and/or box selection) clears the selection, deselects the tool, and
   enters pan mode — no toolbar button, `Escape` is the only entry. In pan mode plain left-drag

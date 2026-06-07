@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RetroWave - 數位電路波型繪製工具 (原型 v1.18)
+RetroWave - 數位電路波型繪製工具 (原型 v1.19)
 本版重點 :
   1. 所有轉換線斜率統一 = 擺幅/tw (BUS↔HiZ 不再不一致)。
   2/3/4. BUS 拖曳：原為 BUS 的格保留延續、非 BUS 的格才取代 (不蓋既有資料)。
@@ -1117,7 +1117,7 @@ class TemplateLibrary:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RetroWave - 數位波型繪製工具  v1.18")
+        self.title("RetroWave - 數位波型繪製工具  v1.19")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.model = Model(); self.geom = Geometry(); self.engine = Engine()
@@ -1128,6 +1128,7 @@ class App(tk.Tk):
         self._clip_kind = None; self._copy_ctx = "cells"
         self._press = None; self._press_xy = (0, 0); self._moved = False
         self._marquee = None; self._selecting = False; self._panning = False
+        self._pan_anchor = None
         self._drag_value = None; self._hover = None
         self._hover_node = None; self._hover_edge = None
         self._connecting = False; self._connect_from = None; self._connect_xy = None
@@ -1384,10 +1385,22 @@ class App(tk.Tk):
         for i, t in enumerate(WAVE_TYPES, start=1):
             self.bind(str(i), keyed(lambda x=t: self._set_tool(x)))
 
+    def _scrollable(self):
+        """回傳 (水平可捲, 垂直可捲)：內容尺寸未超過視窗可視範圍時，該軸禁止平移/滾動。"""
+        sr = self.wave_cv.cget("scrollregion").split()
+        if len(sr) != 4:
+            return (False, False)
+        cw = float(sr[2]) - float(sr[0]); ch = float(sr[3]) - float(sr[1])
+        return (cw > self.wave_cv.winfo_width(), ch > self.wave_cv.winfo_height())
+
     def _yview(self, *a):
+        if not self._scrollable()[1]:
+            self.wave_cv.yview_moveto(0.0); self.name_cv.yview_moveto(0.0); return
         self.wave_cv.yview(*a); self.name_cv.yview(*a)
 
     def _on_wheel(self, e):
+        if not self._scrollable()[1]:
+            return
         d = -1 if (getattr(e, "delta", 0) > 0 or e.num == 4) else 1
         self.wave_cv.yview_scroll(d, "units"); self.name_cv.yview_scroll(d, "units")
 
@@ -1455,6 +1468,12 @@ class App(tk.Tk):
     def render(self):
         self.name_cv.configure(width=self.geom.name_w)
         self.engine.draw(self.name_cv, self.wave_cv, self.model, self.sig_sel, self.geom, self.cell_sel)
+        # 內容縮回視窗範圍內（刪列/收合群組等）時，把該軸拉回原點並保持名稱欄同步
+        h_ok, v_ok = self._scrollable()
+        if not v_ok:
+            self.wave_cv.yview_moveto(0.0); self.name_cv.yview_moveto(0.0)
+        if not h_ok:
+            self.wave_cv.xview_moveto(0.0)
         self._draw_annot_overlay()
         self._draw_drag_overlay()
         self._update_status()
@@ -1576,7 +1595,7 @@ class App(tk.Tk):
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
         if self.active_tool is None and not (ctrl or shift):   # 拖曳模式：左鍵=平移畫布
             self._panning = True
-            self.wave_cv.scan_mark(e.x, e.y)
+            self._pan_anchor = (e.x, e.y, self.wave_cv.xview()[0], self.wave_cv.yview()[0])
             self._press = None; self._selecting = False; self._moved = False
             return
         nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
@@ -1605,8 +1624,17 @@ class App(tk.Tk):
 
     def on_motion(self, e):
         if self._panning:
-            self.wave_cv.scan_dragto(e.x, e.y, gain=1)
-            self.name_cv.yview_moveto(self.wave_cv.yview()[0])   # 名稱欄垂直同步
+            # 用 xview/yview_moveto 平移，並依 _scrollable() 明確禁止「內容未超出視窗」
+            # 的軸（取代 scan_dragto：scan 不受 scrollregion 限制，會造成內容比視窗矮
+            # 仍可垂直拖動、且拖出範圍後名稱欄 yview 同步失準）。
+            ax, ay, fx, fy = self._pan_anchor
+            sr = self.wave_cv.cget("scrollregion").split()
+            sw = max(float(sr[2]) - float(sr[0]), 1.0)
+            sh = max(float(sr[3]) - float(sr[1]), 1.0)
+            h_ok, v_ok = self._scrollable()
+            self.wave_cv.xview_moveto(fx + (ax - e.x) / sw if h_ok else 0.0)
+            self.wave_cv.yview_moveto(fy + (ay - e.y) / sh if v_ok else 0.0)
+            self.name_cv.yview_moveto(self.wave_cv.yview()[0])   # 以夾住後的實際值同步名稱欄
             return
         cx, cy = self._ev_xy(e)
         if self._connecting:
@@ -1629,7 +1657,7 @@ class App(tk.Tk):
 
     def on_release(self, e):
         if self._panning:
-            self._panning = False
+            self._panning = False; self._pan_anchor = None
             return
         cx, cy = self._ev_xy(e)
         if self._connecting:
@@ -2525,7 +2553,7 @@ class App(tk.Tk):
             "雙擊名稱 改名")
 
     def help_about(self):
-        messagebox.showinfo("關於", "RetroWave v1.18\n數位電路波型繪製工具\nPython + tkinter")
+        messagebox.showinfo("關於", "RetroWave v1.19\n數位電路波型繪製工具\nPython + tkinter")
 
 
 if __name__ == "__main__":

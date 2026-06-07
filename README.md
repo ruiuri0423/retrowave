@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.17**. Single-file application (`retrowave.py`), no
+> Status: prototype **v1.18**. Single-file application (`retrowave.py`), no
 > third-party dependencies required to run (Pillow is optional, only for PNG export).
 
 ---
@@ -25,6 +25,11 @@ templates, and export to PNG, SVG or EPS.
   again to edit its value.
 
 **Editing & selection**
+- **Pan mode** (`Esc`): deselects the tool so plain left-drag pans the canvas —
+  no more accidental painting while navigating. Shift/Ctrl + left-drag still
+  box-selects; click an element button or press 1–6 to return to drawing.
+  `Esc` works from any state (also clears an active box selection); there is
+  deliberately no toolbar button for it.
 - Box-select a rectangular region (Shift **or** Ctrl + drag — both are pure
   selection); then press an element key to fill, or `Ctrl+C` to copy.
 - Per-signal **color (highlight)** and **offset / phase shift**, applied to one or
@@ -119,8 +124,15 @@ immediately.
 2. Click a cell to draw it, or drag along a row to brush.
 3. For a BUS, click the cell again to type/edit its data label.
 
+**Pan / navigate**
+- Press `Esc` to enter **pan mode** (no element selected): left-drag pans the
+  canvas, and clicks never paint. The cursor changes to a move shape.
+- Shift/Ctrl + left-drag still box-selects while panning.
+- Click an element button or press `1`–`6` to go back to drawing.
+
 **Select & fill a region**
-- Hold **Shift or Ctrl** and drag on the canvas to box-select.
+- Hold **Shift or Ctrl** and drag on the canvas to box-select (works in both
+  draw and pan mode).
 - With a region selected, press an element key to fill it, or `Ctrl+C` to copy.
 
 **Per-signal tweaks (name column)**
@@ -152,9 +164,9 @@ immediately.
 |---|---|
 | `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+E` | New / Open / Save / Export |
 | `1`–`6` | Select element (CLK / H / L / BUS / HiZ / Unknown) |
-| Shift or Ctrl + drag | Box-select on canvas |
+| Shift or Ctrl + drag | Box-select on canvas (draw or pan mode) |
 | `Ctrl+C` / `Ctrl+V` | Copy / paste (cells, signals, or group — by last selection) |
-| `Esc` | Clear selection |
+| `Esc` | Pan mode: clear selection + deselect tool; left-drag then pans the canvas |
 | Right-click on a cell | Clear to Low |
 | Double-click a name | Rename |
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RetroWave - 數位電路波型繪製工具 (原型 v1.17)
+RetroWave - 數位電路波型繪製工具 (原型 v1.18)
 本版重點 :
   1. 所有轉換線斜率統一 = 擺幅/tw (BUS↔HiZ 不再不一致)。
   2/3/4. BUS 拖曳：原為 BUS 的格保留延續、非 BUS 的格才取代 (不蓋既有資料)。
@@ -1117,7 +1117,7 @@ class TemplateLibrary:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RetroWave - 數位波型繪製工具  v1.17")
+        self.title("RetroWave - 數位波型繪製工具  v1.18")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.model = Model(); self.geom = Geometry(); self.engine = Engine()
@@ -1127,7 +1127,7 @@ class App(tk.Tk):
         self.clip_group = None
         self._clip_kind = None; self._copy_ctx = "cells"
         self._press = None; self._press_xy = (0, 0); self._moved = False
-        self._marquee = None; self._selecting = False
+        self._marquee = None; self._selecting = False; self._panning = False
         self._drag_value = None; self._hover = None
         self._hover_node = None; self._hover_edge = None
         self._connecting = False; self._connect_from = None; self._connect_xy = None
@@ -1372,7 +1372,7 @@ class App(tk.Tk):
         self.bind("<Control-e>", lambda e: self.do_export())
         self.bind("<Control-c>", lambda e: self.do_copy())
         self.bind("<Control-v>", lambda e: self.do_paste())
-        self.bind("<Escape>", lambda e: self._clear_cell_sel())
+        self.bind("<Escape>", lambda e: self._enter_pan_mode())
         self.bind("<Delete>", lambda e: self._del_hovered_annot())
 
         def keyed(fn):
@@ -1395,7 +1395,16 @@ class App(tk.Tk):
     def _set_tool(self, t):
         if self.cell_sel is not None:          # 有框選 -> 填入該範圍
             self._fill_selection(t); return
-        self.active_tool = t; self._refresh_tools(); self.render()
+        self.active_tool = t; self._refresh_tools()
+        self.wave_cv.configure(cursor="")
+        self.render()
+
+    def _enter_pan_mode(self):
+        """Esc：任何狀態皆退回畫布拖曳模式（清除框選、取消元件選擇）。"""
+        self.cell_sel = None
+        self.active_tool = None; self._refresh_tools()
+        self.wave_cv.configure(cursor="fleur")
+        self.render()
 
     def _refresh_tools(self):
         for k, b in self.tool_btns.items():
@@ -1430,13 +1439,18 @@ class App(tk.Tk):
             self.render(); self.status.configure(text=" " + msg + "（選取保留，Esc 清除）")
 
     def _update_status(self):
+        if self.active_tool is None:
+            self.status.configure(
+                text=f" 拖曳模式 | 左鍵拖曳=平移畫布 | Shift/Ctrl+左鍵拖曳=框選 "
+                     f"| 點元件鈕或數字鍵回繪製 | 週期{self.model.n_periods}")
+            return
         if self.active_tool == "BUS":
             hint = "點/拖曳=畫BUS(原為BUS保留, 非BUS取代);再點同格=改值"
         else:
             hint = "點/拖曳上色(鎖列)"
         self.status.configure(
             text=f" 筆刷:{self.active_tool} | {hint} | Shift/Ctrl拖曳=框選(按元件鍵填入/Ctrl+C複製) "
-                 f"| 名稱Ctrl/Shift多選 -> 右鍵: 調色/位移/刪除 | 週期{self.model.n_periods}")
+                 f"| 名稱Ctrl/Shift多選 -> 右鍵: 調色/位移/刪除 | Esc=拖曳模式 | 週期{self.model.n_periods}")
 
     def render(self):
         self.name_cv.configure(width=self.geom.name_w)
@@ -1560,6 +1574,11 @@ class App(tk.Tk):
         cx, cy = self._ev_xy(e)
         self._press_xy = (cx, cy)
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
+        if self.active_tool is None and not (ctrl or shift):   # 拖曳模式：左鍵=平移畫布
+            self._panning = True
+            self.wave_cv.scan_mark(e.x, e.y)
+            self._press = None; self._selecting = False; self._moved = False
+            return
         nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
         if nid:                                   # 從錨點拉線 (進入冷凍)
             self._connecting = True; self._connect_from = nid
@@ -1585,6 +1604,10 @@ class App(tk.Tk):
             self.cell_sel = None; self.render()
 
     def on_motion(self, e):
+        if self._panning:
+            self.wave_cv.scan_dragto(e.x, e.y, gain=1)
+            self.name_cv.yview_moveto(self.wave_cv.yview()[0])   # 名稱欄垂直同步
+            return
         cx, cy = self._ev_xy(e)
         if self._connecting:
             self._connect_xy = (cx, cy)
@@ -1605,6 +1628,9 @@ class App(tk.Tk):
             self.render()
 
     def on_release(self, e):
+        if self._panning:
+            self._panning = False
+            return
         cx, cy = self._ev_xy(e)
         if self._connecting:
             target = self._node_at_xy(cx, cy)
@@ -1730,6 +1756,8 @@ class App(tk.Tk):
 
     def _click_cell(self, s, p):
         t = self.active_tool
+        if t is None:                                    # 拖曳模式不繪製
+            return
         cells = self.model.signals[s]["cells"]
         if t == "BUS" and cells[p]["type"] == "BUS":     # 已是 BUS -> 改值
             cur = cells[p].get("text", "")
@@ -2478,21 +2506,26 @@ class App(tk.Tk):
             "  · 游標移到錨點上會高亮；按住錨點拖曳到另一錨點即建立關係線\n"
             "    (拉線時波形會反灰冷凍，凸顯前景)；放開後輸入標籤 (如 t_su)。\n"
             "  · 錨點/關係線：游標移上去高亮後按 Del 刪除；關係線右鍵可改標籤/箭頭樣式。\n"
+            "【拖曳模式】按 Esc 退回拖曳模式（取消元件選擇、清除框選）：\n"
+            "  · 左鍵拖曳 = 平移畫布（不會誤畫元件）。\n"
+            "  · Shift/Ctrl + 左鍵拖曳 = 框選（與繪製模式相同）。\n"
+            "  · 點元件鈕或按 1~6 數字鍵即回到繪製模式。\n"
             "【位移】右移 offset 後左緣自動延伸第一格準位、右端裁齊，呈現延續感。\n"
             "【匯出】圖片 PNG(1–4×)/SVG(向量)/EPS；另可匯出 WaveDrom JSON 交換格式。\n"
-            "【其他】波形右鍵亦可「清成 L」；雙擊名稱改名；Esc 清除框選。")
+            "【其他】波形右鍵亦可「清成 L」；雙擊名稱改名；Esc 退回拖曳模式並清除框選。")
 
     def help_keys(self):
         messagebox.showinfo("快捷鍵",
             "Ctrl+N/O/S/E 新增/開啟/儲存/匯出   Ctrl+C/V 複製/貼上\n"
             "1~6 切換元件 (CLK/H/L/BUS/HiZ/Unknown)\n"
-            "Shift/Ctrl+拖曳 框選   按元件鍵=填入框選   Esc 清除框選\n"
+            "Esc 拖曳模式(取消元件選擇/清除框選)；拖曳模式下左鍵拖曳=平移畫布\n"
+            "Shift/Ctrl+拖曳 框選(兩種模式皆可)   按元件鍵=填入框選\n"
             "名稱欄 Ctrl/Shift+點擊 多選 -> 右鍵選單(調色/位移/群組/改名/刪除)\n"
             "波形右鍵 建立錨點/清成L；拖曳錨點拉關係線；Del 刪除標注\n"
             "雙擊名稱 改名")
 
     def help_about(self):
-        messagebox.showinfo("關於", "RetroWave v1.17\n數位電路波型繪製工具\nPython + tkinter")
+        messagebox.showinfo("關於", "RetroWave v1.18\n數位電路波型繪製工具\nPython + tkinter")
 
 
 if __name__ == "__main__":

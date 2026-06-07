@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.17** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
+**Spec version: v1.18** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#14-changelog) at the end.
 
@@ -588,24 +588,48 @@ Point-to-segment distance is used for edge hit-testing.
 
 ### 8.1 Tools and the wave canvas
 
-A current **tool** is one of the six element types (chosen by toolbar buttons or number keys 1–6).
+A current **tool** is one of the six element types (chosen by toolbar buttons or number keys 1–6),
+**or none** — the *pan mode* described in §8.1a. Tool = none means the left button navigates
+instead of painting, eliminating accidental edits while moving around a large diagram.
 
 ```
 on_press(wave):
+    if tool is NONE and no modifier: begin PAN (record scan origin); stop
     if pointer is over an anchor AND no modifier: begin CONNECT drag (see §7.3); stop
     record press cell ; moved=false
-    if Ctrl or Shift held: begin BOX-SELECT
+    if Ctrl or Shift held: begin BOX-SELECT          # works in both paint and pan mode
     else: PAINT the press cell with the current tool
 
 on_motion(wave):
+    if PAN: scroll the wave canvas by the cursor delta (gain 1);
+            sync the name column's vertical view to the wave canvas; stop
     if CONNECT: update rubber line + freeze + target highlight
     else if BOX-SELECT: update the marquee rectangle
     else if a press cell exists: PAINT along the SAME ROW as the press (row-locked brush)
 
 on_release(wave):
+    if PAN: end panning; stop
     if CONNECT: finalize edge (see §7.3)
     else if BOX-SELECT: store the rectangular cell selection
 ```
+
+### 8.1a Pan mode (tool = none)
+
+`Escape` is the single entry point — there is **no toolbar button** for pan mode. From *any*
+state (tool selected, box selection active, both) `Escape` clears the box selection, deselects
+the tool, and enters pan mode in one press. The cursor switches to a move/fleur shape and the
+status bar announces the mode.
+
+While in pan mode:
+- **Left-drag** pans the canvas in both axes (the name column follows vertically).
+- **Shift/Ctrl + left-drag** still performs BOX-SELECT, exactly as in paint mode; with a
+  selection active, element keys fill the block as usual (filling does not leave pan mode).
+- A plain left click never paints, never starts a CONNECT drag, and keeps the current
+  box selection intact (panning is pure navigation).
+- Right-click context menus (anchors, edges, "clear to L") remain available.
+
+Exiting pan mode: click any element button or press a number key 1–6 (when no box selection is
+active — otherwise the key fills the selection first, per §8.1).
 
 **Painting rules**:
 - Setting a cell to the current tool replaces its type.
@@ -951,6 +975,12 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.18** — **Pan mode (tool = none)** to stop accidental painting while navigating: `Escape`
+  from any state (tool active and/or box selection) clears the selection, deselects the tool, and
+  enters pan mode — no toolbar button, `Escape` is the only entry. In pan mode plain left-drag
+  pans the canvas (name column vertically synced, fleur cursor), Shift/Ctrl + left-drag still
+  box-selects, plain clicks never paint or start connect-drags; element buttons / number keys
+  return to paint mode. (§8.1, §8.1a)
 - **v1.17** — Fixed the offset BUS left-edge **closing chevron slope**: a half-swing transition is
   `tw/2` wide (slope `swing/tw`), not `tw`; now matches every other bus edge for both small and
   large offsets (clips at the left border when the chevron starts off-screen).

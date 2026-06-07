@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
 """文件核心（邏輯單元）：訊號池 + 群組樹 + 標注 + 持久化。
 完全 headless（不得 import tkinter）。設計文件 §2/§5/§10；
-不變量 §2.6 的可執行版本在 tests/conftest.py::assert_invariants。"""
+不變量 §2.6 的可執行版本在 tests/conftest.py::assert_invariants。
+
+呼叫追蹤（閱讀/除錯用）：設環境變數 RETROWAVE_TRACE=1 後啟動，
+Model 的每個方法呼叫會以縮排樹印到 stderr（高頻唯讀方法 layout/new_cell 除外；
+RETROWAVE_TRACE=all 連它們也追）。預設關閉，零開銷。"""
+import functools
+import os
+import sys
 from collections import namedtuple
 
 # 可見列：kind='group'|'sig'；ref=gid 或 signal index；depth=巢狀深度；gcol=繼承的群組色
@@ -478,3 +485,55 @@ class Model:
             if nd.get("type") == "group":
                 out.append(nd); out += self._all_group_nodes(nd.get("children", []))
         return out
+
+
+# ============================================================================
+# 呼叫追蹤（閱讀/除錯用；RETROWAVE_TRACE=1 啟用，預設關閉、零開銷）
+# ----------------------------------------------------------------------------
+#   輸出格式（stderr）：> 進入（含截短的參數）、< 返回（僅在有回傳值時印）。
+#   縮排 = 呼叫深度，可直接看出 L0/L1/L2 分層呼叫鏈，例如：
+#     [model] > group_signals([1, 2], name='SPI')
+#     [model]   > _top_index_of_sid(2)
+#     [model]   < _top_index_of_sid -> 1
+#     [model]   > _detach_sid(2)
+#     [model]   ...
+#     [model]   > _after_tree_change()
+#     [model]     > _resync_signals()
+# ============================================================================
+TRACE = os.environ.get("RETROWAVE_TRACE", "")
+_TRACE_SKIP = () if TRACE == "all" else ("layout", "new_cell")   # 高頻唯讀方法預設不追
+
+
+def _trace_repr(v, limit=48):
+    r = repr(v)
+    return r if len(r) <= limit else r[:limit - 1] + "…"
+
+
+def _install_trace(cls):
+    depth = [0]
+
+    def wrap(name, fn):
+        @functools.wraps(fn)
+        def traced(self, *a, **kw):
+            pad = "  " * depth[0]
+            args = ", ".join([_trace_repr(x) for x in a]
+                             + [f"{k}={_trace_repr(v)}" for k, v in kw.items()])
+            print(f"[model] {pad}> {name}({args})", file=sys.stderr)
+            depth[0] += 1
+            try:
+                out = fn(self, *a, **kw)
+            finally:
+                depth[0] -= 1
+            if out is not None:
+                print(f"[model] {pad}< {name} -> {_trace_repr(out)}", file=sys.stderr)
+            return out
+        return traced
+
+    for name, fn in list(vars(cls).items()):
+        if name.startswith("__") or name in _TRACE_SKIP or not callable(fn):
+            continue
+        setattr(cls, name, wrap(name, fn))
+
+
+if TRACE and TRACE != "0":
+    _install_trace(Model)

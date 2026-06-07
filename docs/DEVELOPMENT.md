@@ -17,6 +17,12 @@ python -m pytest tests/test_model.py -k group        # 跑子集
 python -m compileall -q src    # 語法檢查
 ```
 
+**讀 code 神器 — Model 呼叫追蹤**：設 `RETROWAVE_TRACE=1`（PowerShell：
+`$env:RETROWAVE_TRACE=1`）後啟動或跑腳本，Model 每個方法呼叫會以縮排樹印到
+stderr（進入印參數、返回印回傳值），可直接看出「用例動詞 → 樹操作 → `_after_tree_change`
+對帳」的分層呼叫鏈。高頻唯讀方法（`layout`/`new_cell`）預設不追，`RETROWAVE_TRACE=all`
+連它們也追。預設關閉、零開銷（實作在 `model.py` 檔尾 `_install_trace`）。
+
 **提交門檻**：pytest 全綠 + 語法檢查通過，缺一不可。
 
 ## 2. 程式碼地圖（設計章節 ↔ 符號）

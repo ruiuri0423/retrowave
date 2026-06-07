@@ -137,6 +137,35 @@ def test_move_leaf_downward_same_container_no_off_by_one(model, check):
     check(model)
 
 
+def test_move_leaves_to_block_preserves_order(model, check):
+    """Several leaves move as one contiguous block, ordered by current leaf order
+    (not by the order of the passed-in set)."""
+    model.add_signal("S3"); model.add_signal("S4")   # CLK RST DATA S3 S4
+    sids = {model.signals[0]["sid"], model.signals[2]["sid"]}  # CLK, DATA (unordered set)
+    assert model.move_leaves_to(sids, None, 5)        # move to the tail
+    names = [s["name"] for s in model.signals]
+    assert names == ["RST_N", "S3", "S4", "CLK", "DATA"]   # block keeps CLK->DATA leaf order
+    check(model)
+
+
+def test_move_leaves_into_group(model, check):
+    gid = model.group_signals([0], name="G")          # G(CLK), RST_N, DATA
+    sids = {model.signals[i]["sid"] for i in range(len(model.signals))
+            if model.signals[i]["name"] in ("RST_N", "DATA")}
+    assert model.move_leaves_to(sids, gid, 1)
+    node = model._find_group_node(gid)
+    assert [model.signals[[s["sid"] for s in model.signals].index(c["sid"])]["name"]
+            for c in node["children"]] == ["CLK", "RST_N", "DATA"]
+    check(model)
+
+
+def test_move_leaves_empty_or_bad(model, check):
+    assert model.move_leaves_to(set(), None, 0) is False
+    assert model.move_leaves_to({999}, None, 0) is False
+    assert model.move_leaves_to({model.signals[0]["sid"]}, "no_gid", 0) is False
+    check(model)
+
+
 def test_move_leaf_into_group_at_position(model, check):
     gid = model.group_signals([1, 2], name="G")
     sid = model.signals[0]["sid"]                    # CLK

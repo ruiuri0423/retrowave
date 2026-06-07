@@ -1,3 +1,5 @@
+![RetroWave](assets/banner.png)
+
 # RetroWave
 
 A lightweight **digital timing / waveform editor** with a Windows 95/XP retro look,
@@ -5,15 +7,46 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-![RetroWave — an SPI transaction with nested groups, bus values, phase offset and timing annotations](assets/hero.png)
-*Rendered by RetroWave's own PNG exporter (2× resolution).*
-
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.30**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.31**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
+
+---
+
+## Requirements
+
+- **Python 3.8+** with `tkinter`.
+  - `tkinter` ships with most CPython installs. On some Linux distros you may need
+    the system package, e.g. `sudo apt install python3-tk`.
+- **Optional:** [Pillow](https://pypi.org/project/Pillow/) for PNG export:
+  ```bash
+  pip install pillow
+  ```
+  (EPS / PS export needs nothing extra.)
+
+---
+
+## Getting started
+
+```bash
+python run.py            # or: cd src && python -m retrowave
+```
+
+No Python? Grab the prebuilt **Windows onefile exe** from the
+[Releases](../../releases) page (built automatically from each `v*` tag — tests run
+first, PNG export included).
+
+> **SmartScreen / antivirus note**: the exe is currently unsigned, so Windows may show
+> a "protected your PC" prompt (More info → Run anyway). Each release ships a
+> `SHA256SUMS.txt` to verify integrity, plus an **onedir zip** variant that trips far
+> fewer antivirus heuristics than the self-extracting onefile. Code signing hooks are
+> already built into the release pipeline (see `.github/workflows/release.yml`).
+
+The window opens with a small demo waveform so you can start experimenting
+immediately — and a short interactive tutorial on first launch.
 
 ---
 
@@ -83,6 +116,9 @@ templates, and export to PNG, SVG or EPS.
   group to **merge** it in at the exact cursor position (merge + reorder in one
   move); drop on a header's upper half to place it just before that group; drop
   among top-level signals to move it **out** to the top level.
+- **Multi-select drag**: select several signals (Ctrl/Shift+click), then drag any one
+  of them to move the whole selection as a contiguous block (it keeps its top-to-bottom
+  order) — reorder, merge into a group, or move out, all in one gesture and one undo step.
 - Drag a group header to move the whole group; dropping it onto another group
   **nests** it as a subgroup (it can't be dropped into its own descendant).
 - Drag starts only after moving past half a row height. While dragging, the view
@@ -115,40 +151,6 @@ templates, and export to PNG, SVG or EPS.
   preserved). No third-party dependency.
 - EPS / PostScript export uses tkinter's built-in PostScript writer (zero
   dependencies).
-
----
-
-## Requirements
-
-- **Python 3.8+** with `tkinter`.
-  - `tkinter` ships with most CPython installs. On some Linux distros you may need
-    the system package, e.g. `sudo apt install python3-tk`.
-- **Optional:** [Pillow](https://pypi.org/project/Pillow/) for PNG export:
-  ```bash
-  pip install pillow
-  ```
-  (EPS / PS export needs nothing extra.)
-
----
-
-## Getting started
-
-```bash
-python run.py            # or: cd src && python -m retrowave
-```
-
-No Python? Grab the prebuilt **Windows onefile exe** from the
-[Releases](../../releases) page (built automatically from each `v*` tag — tests run
-first, PNG export included).
-
-> **SmartScreen / antivirus note**: the exe is currently unsigned, so Windows may show
-> a "protected your PC" prompt (More info → Run anyway). Each release ships a
-> `SHA256SUMS.txt` to verify integrity, plus an **onedir zip** variant that trips far
-> fewer antivirus heuristics than the self-extracting onefile. Code signing hooks are
-> already built into the release pipeline (see `.github/workflows/release.yml`).
-
-The window opens with a small demo waveform so you can start experimenting
-immediately — and a short interactive tutorial on first launch.
 
 ---
 

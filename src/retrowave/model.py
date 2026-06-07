@@ -180,6 +180,29 @@ class Model:
         self._after_tree_change()
         return True
 
+    def move_leaves_to(self, sids, container_gid, index):
+        """Move several signal leaves into the target container at index, as one
+        contiguous block preserving their current DFS leaf order. Marker method:
+        one placeholder is inserted, every sid detached, then the marker is
+        replaced by the whole block (so indices auto-correct, same as move_leaf_to)."""
+        order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
+        sids = sorted({s for s in sids if s in order}, key=lambda s: order[s])
+        if not sids:
+            return False
+        cont = self._container_children(container_gid)
+        if cont is None:
+            return False
+        index = max(0, min(len(cont), index))
+        marker = {"type": "_marker"}
+        cont.insert(index, marker)
+        nodes = [n for n in (self._detach_sid(s) for s in sids) if n is not None]
+        if not nodes:
+            cont.remove(marker); self._after_tree_change(); return False
+        at = cont.index(marker)
+        cont[at:at + 1] = nodes                  # replace the marker with the block
+        self._after_tree_change()
+        return True
+
     def move_group_to(self, gid, container_gid, index):
         """Move a group to the given position in the target container (nested if the container is a group). Guard: cannot move into itself or its descendants."""
         if self._find_group_node(gid) is None:

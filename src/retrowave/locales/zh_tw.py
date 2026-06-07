@@ -156,6 +156,7 @@ TRANSLATIONS = {
 
     # ---- name drag move status ----
     " Moved signal": " 已移動訊號",
+    " Moved {n} signals": " 已移動 {n} 條訊號",
     " (merged into group)": "（併入群組）",
     " (moved to top level)": "（移到頂層）",
     " Moved group": " 已移動群組",
@@ -388,3 +389,6 @@ TRANSLATIONS = {
     # ---- text window close button ----
     "Close": "關閉",
 }
+
+# Shortcuts table (key reproduced exactly from app.help_keys)
+TRANSLATIONS['[File]\n  Ctrl+N            New\n  Ctrl+O            Open\n  Ctrl+S            Save\n  Ctrl+E            Export image\n[Edit]\n  Ctrl+Z            Undo (last 5 steps; one gesture = one step)\n  Ctrl+Y            Redo\n  Ctrl+C            Copy (cells / signals / group)\n  Ctrl+V            Paste (auto-adds rows when needed)\n[Drawing]\n  1 - 6             Pick element (CLK / H / L / BUS / HiZ / Unknown)\n  Click / drag      Paint a cell / brush along the row (row-locked)\n  Shift/Ctrl + drag Box-select (then press an element key to fill)\n  Esc               Pan mode (left-drag pans; clears box-select)\n[Name column]\n  Click             Select a signal\n  Ctrl/Shift+click  Multi-select\n  Drag              Reorder / merge into group / move out (multi-select OK)\n  Double-click      Rename\n  Right-click       Menu: color / offset / group / rename / delete\n[Annotations]\n  Right-click wave  Create anchor / Clear to L\n  Drag anchor       Draw a relationship line to another anchor\n  Del               Delete the annotation under the cursor'] = '[檔案]\n  Ctrl+N            新增\n  Ctrl+O            開啟\n  Ctrl+S            儲存\n  Ctrl+E            匯出圖片\n[編輯]\n  Ctrl+Z            復原（最近 5 步；一次手勢 = 一步）\n  Ctrl+Y            重做\n  Ctrl+C            複製（波形格／訊號／群組）\n  Ctrl+V            貼上（需要時自動新增列）\n[繪製]\n  1 - 6             選擇元件（CLK / H / L / BUS / HiZ / Unknown）\n  Click / drag      畫一格／沿列連刷（鎖列）\n  Shift/Ctrl + drag 框選（再按元件鍵填入）\n  Esc               拖曳模式（左鍵平移；清除框選）\n[名稱欄]\n  Click             選取訊號\n  Ctrl/Shift+click  多選\n  Drag              重排／併入群組／移出（可多選）\n  Double-click      改名\n  Right-click       選單：調色／位移／群組／改名／刪除\n[標注]\n  Right-click wave  建立錨點／清成 L\n  Drag anchor       拉關係線到另一錨點\n  Del               刪除游標下的標注'

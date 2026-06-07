@@ -21,6 +21,8 @@ _lang = DEFAULT
 
 def available_languages():
     """code -> native display name (shown in the Language menu)."""
+    # Native language names are shown verbatim in the Language menu, so this map
+    # intentionally contains non-English text (a sanctioned exception, like the catalogs).
     return {"en": "English", "zh-TW": "繁體中文"}
 
 

@@ -883,13 +883,24 @@ class App(tk.Tk):
             tgt = self._drop_target
             if tgt is not None and tgt.get("valid"):
                 if self._drag_kind == "sig":
-                    sid = self.model.signals[self._drag_ref]["sid"]
-                    self.doc.move_leaf_to(sid, tgt["container"], tgt["index"])
-                    self.sig_sel = {i for i, s in enumerate(self.model.signals) if s["sid"] == sid}
+                    drag_sid = self.model.signals[self._drag_ref]["sid"]
+                    sel_sids = {self.model.signals[i]["sid"] for i in self.sig_sel
+                                if 0 <= i < len(self.model.signals)}
+                    where = (tr(" (merged into group)") if tgt["container"]
+                             else tr(" (moved to top level)"))
+                    if len(sel_sids) > 1 and drag_sid in sel_sids:   # multi-select drag = move the block
+                        self.doc.move_leaves_to(sel_sids, tgt["container"], tgt["index"])
+                        self.sig_sel = {i for i, s in enumerate(self.model.signals)
+                                        if s["sid"] in sel_sids}
+                        self.status.configure(
+                            text=tr(" Moved {n} signals").format(n=len(self.sig_sel)) + where)
+                    else:                                            # single signal
+                        self.doc.move_leaf_to(drag_sid, tgt["container"], tgt["index"])
+                        self.sig_sel = {i for i, s in enumerate(self.model.signals)
+                                        if s["sid"] == drag_sid}
+                        self.status.configure(text=tr(" Moved signal") + where)
                     self.selected = next(iter(self.sig_sel), self.selected)
                     self._sig_anchor = self.selected
-                    self.status.configure(text=tr(" Moved signal") +
-                                          (tr(" (merged into group)") if tgt["container"] else tr(" (moved to top level)")))
                 else:
                     self.doc.move_group_to(self._drag_ref, tgt["container"], tgt["index"])
                     self.status.configure(text=tr(" Moved group") +
@@ -1386,7 +1397,7 @@ class App(tk.Tk):
         messagebox.showinfo(tr("Language"),
                             tr("Language preference saved. Restart RetroWave to apply."))
 
-    def _show_text_window(self, title, text, size=(640, 520)):
+    def _show_text_window(self, title, text, size=(640, 520), mono=False):
         """A solid, scrollable read-only document window (replaces hard-to-read messageboxes)."""
         win = tk.Toplevel(self)
         win.title(title)
@@ -1396,19 +1407,21 @@ class App(tk.Tk):
         win.transient(self)
         body = tk.Frame(win, bg=Style.FACE, bd=2, relief=tk.SUNKEN)
         body.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
+        base = ("Consolas", 10) if mono else ("Tahoma", 10)   # mono keeps the key/desc columns aligned
+        bold = (base[0], 10, "bold")
         txt = tk.Text(body, wrap="word", bg=Style.CANVAS_BG, fg=Style.TEXT,
-                      font=("Tahoma", 10), relief=tk.FLAT, padx=12, pady=10,
+                      font=base, relief=tk.FLAT, padx=12, pady=10,
                       spacing1=2, spacing3=6)
         sb = tk.Scrollbar(body, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        txt.tag_configure("h", font=("Tahoma", 10, "bold"), spacing1=10, spacing3=4)
+        txt.tag_configure("h", font=bold, foreground="#1F5FBF", spacing1=12, spacing3=4)
         for line in text.split("\n"):
-            if line.startswith("[") and "]" in line:     # [Section] headings get bold styling
+            if line.startswith("[") and "]" in line:     # [Section] -> bold heading, brackets dropped
                 head, _, rest = line.partition("]")
-                txt.insert("end", head + "]", "h")
-                txt.insert("end", rest + "\n")
+                txt.insert("end", head[1:], "h")          # section label (no brackets)
+                txt.insert("end", rest + "\n")            # rest of the line stays normal
             else:
                 txt.insert("end", line + "\n")
         txt.configure(state="disabled")
@@ -1445,15 +1458,34 @@ class App(tk.Tk):
             "[Other] Right-click a waveform also offers \"Clear to L\"; double-click a name to rename; Esc falls back to pan mode and clears box-select."))
 
     def help_keys(self):
+        # Aligned two-column table (keys left, description right) in a monospace window.
         return self._show_text_window(tr("Shortcuts"),
-            tr("Ctrl+N/O/S/E New/Open/Save/Export   Ctrl+C/V Copy/Paste\n"
-            "Ctrl+Z/Y Undo/Redo (last 5 steps; one brush/fill/paste = one step)\n"
-            "1~6 Switch element (CLK/H/L/BUS/HiZ/Unknown)\n"
-            "Esc Pan mode (deselect element/clear box-select); in pan mode left-drag = pan canvas\n"
-            "Shift/Ctrl+drag Box-select (works in both modes)   Press an element key = fill the selection\n"
-            "Name column Ctrl/Shift+click for multi-select -> right-click menu (color/offset/group/rename/delete)\n"
-            "Right-click a waveform Create anchor/Clear to L; drag an anchor to draw a relationship line; Del deletes annotations\n"
-            "Double-click a name to rename"), size=(620, 320))
+            tr("[File]\n"
+            "  Ctrl+N            New\n"
+            "  Ctrl+O            Open\n"
+            "  Ctrl+S            Save\n"
+            "  Ctrl+E            Export image\n"
+            "[Edit]\n"
+            "  Ctrl+Z            Undo (last 5 steps; one gesture = one step)\n"
+            "  Ctrl+Y            Redo\n"
+            "  Ctrl+C            Copy (cells / signals / group)\n"
+            "  Ctrl+V            Paste (auto-adds rows when needed)\n"
+            "[Drawing]\n"
+            "  1 - 6             Pick element (CLK / H / L / BUS / HiZ / Unknown)\n"
+            "  Click / drag      Paint a cell / brush along the row (row-locked)\n"
+            "  Shift/Ctrl + drag Box-select (then press an element key to fill)\n"
+            "  Esc               Pan mode (left-drag pans; clears box-select)\n"
+            "[Name column]\n"
+            "  Click             Select a signal\n"
+            "  Ctrl/Shift+click  Multi-select\n"
+            "  Drag              Reorder / merge into group / move out (multi-select OK)\n"
+            "  Double-click      Rename\n"
+            "  Right-click       Menu: color / offset / group / rename / delete\n"
+            "[Annotations]\n"
+            "  Right-click wave  Create anchor / Clear to L\n"
+            "  Drag anchor       Draw a relationship line to another anchor\n"
+            "  Del               Delete the annotation under the cursor"),
+            size=(560, 560), mono=True)
 
     def help_about(self):
         messagebox.showinfo(tr("About"), tr("RetroWave v{v}\nDigital circuit waveform editor\nPython + tkinter").format(v=__version__))

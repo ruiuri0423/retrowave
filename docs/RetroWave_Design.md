@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.30** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.31** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -1129,6 +1129,17 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.31** — **Multi-select drag, keycap-style shortcuts table, README banner.**
+  (1) Dragging a name now moves the *whole* multi-selection as one contiguous block
+  (preserving DFS leaf order) when the grabbed row is part of it — a new
+  `Model.move_leaves_to` (marker method: one placeholder, detach all, replace with the block)
+  and `Document.move_leaves_to` (one undo step); dragging a row outside the selection still
+  moves just that one. (2) The *Shortcuts* window is now an aligned two-column table
+  (keys | description) grouped by section, rendered in a monospace document window.
+  (3) New `assets/banner.png` (hand-drawn light-blue circuit/waveform motifs on dark blue with
+  a centered cyber wordmark) heads the README; the static hero image was dropped (the animated
+  demo remains) and the Requirements/Getting-started/Features order was rearranged. Guards:
+  `move_leaves_to` model tests + multi-select drag interaction tests.
 - **v1.30** — **Help readability, tutorial-card sizing, and bilingual UI (i18n).**
   (1) *Usage* and *Shortcuts* moved from cramped message boxes to solid, scrollable document
   windows with bold section headings and an Esc/Close affordance. (2) The tutorial info card

@@ -202,6 +202,43 @@ def test_drag_signal_out_of_bottom_group(app):
     assert_invariants(app.model)
 
 
+def _row_y(app, row):
+    g = app.geom
+    return g.header_h + row * g.row_h + g.row_h // 2
+
+
+def test_multi_select_drag_moves_block(app):
+    """Selecting >1 signal and dragging moves the whole block (one undo step)."""
+    for n in ("S3", "S4"):
+        app.doc.add_signal(n)                        # CLK RST_N DATA S3 S4 (rows 0..4)
+    app.sig_sel = {0, 2}; app.selected = 2; app._sig_anchor = 0   # CLK + DATA
+    app.doc._undo.clear()
+    rows = app.model.layout()
+    app.on_name_press(Ev(10, _row_y(app, 2)))        # press on DATA (in selection)
+    app.on_name_drag(Ev(10, _row_y(app, len(rows)) + app.geom.row_h))   # drag below all rows
+    app.on_name_release(Ev(10, _row_y(app, len(rows)) + app.geom.row_h))
+    names = [s["name"] for s in app.model.signals]
+    assert names == ["RST_N", "S3", "S4", "CLK", "DATA"]   # block kept CLK->DATA order, moved to tail
+    assert app.doc.history()[0] == 1                  # single undo step for the whole block
+    sel_names = {app.model.signals[i]["name"] for i in app.sig_sel}
+    assert sel_names == {"CLK", "DATA"}               # selection follows the moved signals
+    assert_invariants(app.model)
+
+
+def test_drag_row_outside_selection_moves_only_it(app):
+    """Dragging a row that is NOT in the multi-selection moves just that one."""
+    for n in ("S3", "S4"):
+        app.doc.add_signal(n)
+    app.sig_sel = {0, 1}; app.selected = 1           # CLK + RST_N selected
+    rows = app.model.layout()
+    app.on_name_press(Ev(10, _row_y(app, 4)))        # press on S4 (outside selection)
+    app.on_name_drag(Ev(10, _row_y(app, 0) - app.geom.row_h))
+    app.on_name_release(Ev(10, _row_y(app, 0) - app.geom.row_h))
+    assert app.model.signals[0]["name"] == "S4"      # only S4 moved
+    assert {app.model.signals[i]["name"] for i in app.sig_sel} == {"S4"}  # selection reset to it
+    assert_invariants(app.model)
+
+
 # ---------------------------------------------------------------- template insertion
 def test_insert_template_fresh_sids_and_group(app, tmp_path):
     blob = {"signals": [

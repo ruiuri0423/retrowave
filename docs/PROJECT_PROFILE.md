@@ -44,8 +44,8 @@ community traction links as they accumulate.
 
 ## Outreach checklist (turns assets into reputation)
 
-1. README hero image + animated demo (already in place: `assets/hero.png`, `assets/demo.gif` —
-   both produced by RetroWave's own export pipeline, which is itself proof of the product's capability)
+1. README banner + animated demo (already in place: `assets/banner.png`, `assets/demo.gif` —
+   the demo is produced by RetroWave's own export pipeline, which is itself proof of the product's capability)
 2. Publish the first GitHub Release (including exe + zip + checksums)
 3. Show HN ("Show HN: RetroWave – a retro-style digital timing diagram editor in pure
    Python/Tk"), Reddit r/FPGA, r/Python, EEVblog; add the thread links to the list above

@@ -10,7 +10,9 @@ from retrowave.locales import zh_tw
 
 @pytest.fixture(autouse=True)
 def reset_language():
-    """i18n keeps module-level state; always restore English after each test."""
+    """i18n keeps module-level state (and the App fixture may have applied a
+    persisted language). Pin English around each test, both before and after."""
+    set_language("en")
     yield
     set_language("en")
 

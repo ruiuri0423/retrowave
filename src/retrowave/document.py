@@ -291,6 +291,15 @@ class Document:
         self._mutated("structure", before)
         return True
 
+    def move_leaves_to(self, sids, container_gid, index):
+        """Move several signals as one block (multi-select drag)."""
+        before = self._before()
+        ok = self._model.move_leaves_to(sids, container_gid, index)
+        if not ok:
+            return False
+        self._mutated("structure", before)
+        return True
+
     def move_group_to(self, gid, container_gid, index):
         before = self._before()
         ok = self._model.move_group_to(gid, container_gid, index)

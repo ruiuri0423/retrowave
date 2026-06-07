@@ -22,7 +22,10 @@ python -m compileall -q src    # 語法檢查
 ## 2. 程式碼地圖（設計章節 ↔ 符號）
 
 程式碼在 `src/retrowave/` 套件，依設計文件 §14 嚴格分層 —
-**除了 `app.py`（與 `__main__.py`）外，任何模組不得 `import tkinter`**（有邊界測試把關）：
+**除了 shell 層（`app.py`、`tutorial.py`、`__main__.py`）外，任何模組不得 `import tkinter`**
+（有邊界測試把關）。GUI 測試/自動化以環境變數 `RETROWAVE_NO_TUTORIAL=1` 抑制首啟教學。
+推 `v*` 標籤會觸發 `.github/workflows/release.yml`：windows-latest 跑全套測試 →
+PyInstaller onefile → 發佈 GitHub Release。
 
 ```
 src/retrowave/
@@ -35,7 +38,8 @@ src/retrowave/
 ├── backends.py    PILCanvas, SVGCanvas     繪圖單元（PNG/SVG 匯出後端）
 ├── export.py      export_png/svg/wavedrom  繪圖單元（匯出管線，純函式）
 ├── document.py    Document                 傳遞層（命令/事件/交易/undo；§8）
-├── app.py         App, make_key_button     UI 殼層（唯一 tkinter 使用者）
+├── app.py         App, make_key_button     UI 殼層（tkinter）
+├── tutorial.py    TutorialOverlay          UI 殼層（開啟教學遮罩；設定存 ~/.retrowave/settings.json）
 ├── __init__.py    __version__ + re-export（UI 名稱 PEP 562 延遲載入）
 └── __main__.py    python -m retrowave
 ```

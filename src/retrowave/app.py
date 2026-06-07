@@ -16,6 +16,7 @@ from .export import export_png, export_svg, export_wavedrom
 from .geometry import Geometry
 from .templates import TemplateLibrary
 from .theme import Style
+from .tutorial import TutorialOverlay, tutorial_enabled
 
 SHIFT_MASK = 0x0001
 CTRL_MASK = 0x0004
@@ -58,6 +59,49 @@ class App(tk.Tk):
         self._build_statusbar(); self._bind_keys()
         self._set_tool("H"); self.render()          # 首次繪製須同步，視窗一出現即完整
         self.after(150, self._startup_templates)    # 視窗顯示後再載入範本/提示缺檔
+        self.after(450, self._maybe_show_tutorial)  # 首次啟動顯示開啟教學
+
+    def _maybe_show_tutorial(self, force=False):
+        """首啟教學：可被環境變數（測試/自動化）與使用者偏好關閉；Help 選單可強制重開。"""
+        if not force:
+            if os.environ.get("RETROWAVE_NO_TUTORIAL"):
+                return
+            if not tutorial_enabled():
+                return
+        if getattr(self, "_tutorial", None) is not None and self._tutorial.winfo_exists():
+            return
+        self._tutorial = TutorialOverlay(self, self._tutorial_steps())
+
+    def _tutorial_steps(self):
+        toolbar = self.tool_btns["CLK"].master       # 元件工具列整條
+        cfg = self.sp_p.master                       # 幾何/週期 spinbox 區
+        return [
+            (None, "歡迎使用 RetroWave",
+             "這是一支復古風的數位時序／波形編輯器。\n"
+             "接下來用幾步帶你認識主要操作 — 亮起的區域就是當下可以動手的地方，"
+             "你可以直接在上面操作試試。\n\n（隨時按 Esc 或「略過」結束教學）"),
+            (toolbar, "元件工具列",
+             "點選元件（或按數字鍵 1~6）：CLK 時脈、H 高準位、L 低準位、"
+             "BUS 資料匯流排、HiZ 高阻抗、Unknown 未知。\n"
+             "「＋訊號」新增一條訊號列。選好元件後就能在右側畫布上畫波形。"),
+            (self.wave_cv, "波形畫布",
+             "點一格畫一格；按住拖曳沿同一列連刷（鎖列不怕手抖）。\n"
+             "BUS 格再點一次可輸入資料值。\n"
+             "Shift/Ctrl + 拖曳 = 框選（按元件鍵整塊填入、Ctrl+C/V 複製貼上）。\n"
+             "右鍵可建立錨點，按住錨點拖到另一錨點 = 拉量測/關係線。"),
+            (self.name_cv, "訊號名稱欄",
+             "點選訊號（Ctrl/Shift 多選）；右鍵選單：調色、位移、建立群組、改名、刪除。\n"
+             "按住名稱上下拖曳可重排，拖進群組 = 併入、拖到最下方空白 = 移出群組。\n"
+             "點群組標頭可折疊/展開整組。"),
+            (cfg, "幾何與週期",
+             "調整格寬、列高、轉換斜率比例與週期數，畫面即時反映。\n"
+             "這些屬於檢視設定，會跟著專案 JSON 一起存檔。"),
+            (None, "最後幾招",
+             "Esc = 拖曳模式（左鍵平移畫布，不會誤畫）。\n"
+             "Ctrl+Z / Ctrl+Y = 復原 / 重做（最近 5 步，一次手勢算一步）。\n"
+             "File 選單可存檔（JSON）、匯出 PNG/SVG/EPS 與 WaveDrom。\n"
+             "之後想重看教學：Help → 使用教學。"),
+        ]
 
     @property
     def model(self):
@@ -90,6 +134,7 @@ class App(tk.Tk):
         self._rebuild_template_menu()
         hmb = tk.Menubutton(bar, text="Help", font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         hm = tk.Menu(hmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
+        hm.add_command(label="使用教學（互動導覽）", command=lambda: self._maybe_show_tutorial(force=True))
         hm.add_command(label="使用說明", command=self.help_usage)
         hm.add_command(label="快捷鍵", command=self.help_keys)
         hm.add_separator()

@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.26**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.27**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -25,6 +25,13 @@ templates, and export to PNG, SVG or EPS.
   vertical drift does not affect other rows).
 - BUS cells preserve existing data when brushed over; click an existing BUS cell
   again to edit its value.
+
+**Onboarding tutorial**
+- First launch opens a step-by-step interactive tour: the window dims, each step
+  **spotlights** the region it explains (on Windows the highlighted area is fully
+  clear *and clickable*, so you can try the gesture immediately). Skip ends it
+  permanently; the last step has a "don't show again" checkbox. Reopen anytime via
+  *Help → 使用教學*.
 
 **Undo / Redo**
 - `Ctrl+Z` / `Ctrl+Y`, last **5 steps**. One gesture = one step: a whole brush stroke,
@@ -120,8 +127,12 @@ templates, and export to PNG, SVG or EPS.
 python run.py            # or: cd src && python -m retrowave
 ```
 
+No Python? Grab the prebuilt **Windows onefile exe** from the
+[Releases](../../releases) page (built automatically from each `v*` tag — tests run
+first, PNG export included).
+
 The window opens with a small demo waveform so you can start experimenting
-immediately.
+immediately — and a short interactive tutorial on first launch.
 
 ---
 

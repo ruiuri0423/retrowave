@@ -7,6 +7,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+os.environ.setdefault("RETROWAVE_NO_TUTORIAL", "1")   # 測試不自動彈出開啟教學
+
 import retrowave  # noqa: E402
 
 

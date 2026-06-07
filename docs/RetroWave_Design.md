@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.26** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.27** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -915,8 +915,26 @@ ACCENT/MARQUEE #1F5FBF (selection, drag, anchors/edges accent: a violet ~#6A3FB5
 Fonts: UI/name ~9px (bold for names/keys); monospace ~9px for period labels and bus values
 ```
 
-Keyboard: `Ctrl+N/O/S/E` (new/open/save/export), `Ctrl+C/V` (copy/paste), `1..6` (tools),
-`Delete` (annotation under cursor), `Escape` (clear cell selection), `Shift/Ctrl+drag` (box select).
+Keyboard: `Ctrl+N/O/S/E` (new/open/save/export), `Ctrl+C/V` (copy/paste), `Ctrl+Z/Y`
+(undo/redo), `1..6` (tools), `Delete` (annotation under cursor), `Escape` (pan mode / clear
+cell selection), `Shift/Ctrl+drag` (box select).
+
+### 11.1 Onboarding tutorial (first launch)
+
+A step-by-step overlay shown on first launch (and on demand from *Help → 使用教學*):
+
+- **Dimming**: a translucent dark layer covers the whole working area; the window stays live
+  underneath.
+- **Spotlight**: each step highlights the UI region it talks about with a bright ring; where
+  the platform supports a true cut-out (Windows `-transparentcolor`), the highlighted region
+  is **fully clear and clickable**, so the user can try the gesture being described right
+  away. Platforms without cut-out support degrade to ring-only.
+- **Steps**: welcome → element toolbar → wave canvas (paint/brush/marquee/anchors) → name
+  column (select/menu/drag-reorder/groups) → geometry+periods → shortcuts & wrap-up.
+- **Exit**: the last step carries a "don't show again" checkbox (default on) + Finish;
+  **Skip** is available on every step and ends the tour permanently. The preference persists
+  as `show_tutorial` in `~/.retrowave/settings.json`. Automation/tests suppress the tour via
+  the `RETROWAVE_NO_TUTORIAL` env var.
 
 ---
 
@@ -1096,6 +1114,18 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.27** — **Onboarding tutorial + Windows release pipeline.** (1) First-launch interactive
+  tour (§11.1, new shell module `tutorial.py`): translucent dim overlay, per-step spotlight
+  (true cut-out + clickable on Windows via `-transparentcolor`, ring-only fallback elsewhere),
+  6 steps (welcome / toolbar / wave canvas / name column / geometry / shortcuts), Skip ends
+  permanently, final step has a default-on "don't show again" checkbox; preference in
+  `~/.retrowave/settings.json`; reopen anytime via *Help → 使用教學*; suppressed in
+  tests/automation by `RETROWAVE_NO_TUTORIAL`. The tkinter boundary test now allows the shell
+  set {app, tutorial, __main__}. (2) GitHub Actions `release.yml`: pushing a `v*` tag runs the
+  test suite on windows-latest, builds a PyInstaller **onefile** exe (`RetroWave-vX.Y-windows.exe`,
+  Pillow bundled so PNG export works), and publishes it as a GitHub Release with generated notes.
+  Guards: `tests/test_tutorial.py` (9 tests: settings persistence, step flow, finish/skip
+  semantics, env suppression, forced reopen).
 - **v1.26** — **Two interaction fixes.** (1) *Pan mode can drag relationship lines*: pressing on
   an anchor now starts a CONNECT drag in pan mode too (anchor hit-test moved ahead of the pan
   branch in `on_press`); previously anchors could be *created* in pan mode via the context menu

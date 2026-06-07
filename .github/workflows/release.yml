@@ -1,0 +1,64 @@
+name: Release (Windows onefile)
+
+# 觸發：推 v* 標籤（例 v1.27）自動建置並發佈 Release；也可手動觸發只取 artifact。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write          # 建立 Release 需要
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pillow pyinstaller
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = python -c "import sys; sys.path.insert(0,'src'); import retrowave; print(retrowave.__version__)"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build onefile exe
+        run: >
+          pyinstaller --onefile --windowed --name RetroWave
+          --paths src run.py
+
+      - name: Rename with version
+        shell: pwsh
+        run: Rename-Item dist/RetroWave.exe "RetroWave-v${{ steps.ver.outputs.version }}-windows.exe"
+
+      - name: Smoke check artifact exists
+        shell: pwsh
+        run: |
+          $exe = "dist/RetroWave-v${{ steps.ver.outputs.version }}-windows.exe"
+          if (!(Test-Path $exe)) { exit 1 }
+          "OK: $exe ($((Get-Item $exe).Length) bytes)"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroWave-v${{ steps.ver.outputs.version }}-windows
+          path: dist/RetroWave-v${{ steps.ver.outputs.version }}-windows.exe
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RetroWave-v${{ steps.ver.outputs.version }}-windows.exe
+          generate_release_notes: true

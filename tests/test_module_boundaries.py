@@ -30,11 +30,12 @@ def test_core_and_drawing_modules_are_headless():
     assert "headless-ok" in r.stdout
 
 
-def test_only_app_imports_tkinter():
-    """靜態檢查：套件內除 app.py / __main__.py 外，任何模組不得 import tkinter。"""
+def test_only_shell_imports_tkinter():
+    """靜態檢查：套件內除 shell 層（app/tutorial/__main__）外，任何模組不得 import tkinter。"""
+    SHELL = ("app.py", "tutorial.py", "__main__.py")
     pkg_dir = os.path.dirname(retrowave.__file__)
     for fn in sorted(os.listdir(pkg_dir)):
-        if not fn.endswith(".py") or fn in ("app.py", "__main__.py"):
+        if not fn.endswith(".py") or fn in SHELL:
             continue
         tree = ast.parse(open(os.path.join(pkg_dir, fn), encoding="utf-8").read())
         for node in ast.walk(tree):

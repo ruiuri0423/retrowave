@@ -10,10 +10,16 @@ RetroWave is a digital timing/waveform editor (Win95/XP retro look) implemented 
 
 ```bash
 python src/retrowave.py          # run the app (opens with a demo waveform)
+python -m pytest                 # full test suite (~50 tests, <1s; GUI tests briefly open a window)
+python -m pytest tests/test_model.py -k group   # run a subset
 python -c "import ast; ast.parse(open('src/retrowave.py',encoding='utf-8').read())"   # syntax check
 ```
 
-There are no tests or linters configured. The syntax check above is the required pre-commit gate.
+Both pytest and the syntax check are the required pre-commit gate. Tests live in `tests/`:
+`test_model.py` (pure Model unit tests; every mutating test asserts the §2.6 invariants via
+`conftest.assert_invariants`) and `test_app_interactions.py` (real `App` driven by synthesized
+events; all GUI tests share one session-scoped Tk root — never create/destroy Tk per test, it
+trips Tcl's `tcl_findLibrary`).
 
 ## Versioning rule (critical)
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RetroWave - 數位電路波型繪製工具 (原型 v1.19)
+RetroWave - 數位電路波型繪製工具 (原型 v1.20)
 本版重點 :
   1. 所有轉換線斜率統一 = 擺幅/tw (BUS↔HiZ 不再不一致)。
   2/3/4. BUS 拖曳：原為 BUS 的格保留延續、非 BUS 的格才取代 (不蓋既有資料)。
@@ -1117,7 +1117,7 @@ class TemplateLibrary:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RetroWave - 數位波型繪製工具  v1.19")
+        self.title("RetroWave - 數位波型繪製工具  v1.20")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.model = Model(); self.geom = Geometry(); self.engine = Engine()
@@ -2553,7 +2553,7 @@ class App(tk.Tk):
             "雙擊名稱 改名")
 
     def help_about(self):
-        messagebox.showinfo("關於", "RetroWave v1.19\n數位電路波型繪製工具\nPython + tkinter")
+        messagebox.showinfo("關於", "RetroWave v1.20\n數位電路波型繪製工具\nPython + tkinter")
 
 
 if __name__ == "__main__":

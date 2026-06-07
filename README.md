@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.19**. Single-file application (`retrowave.py`), no
+> Status: prototype **v1.20**. Single-file application (`retrowave.py`), no
 > third-party dependencies required to run (Pillow is optional, only for PNG export).
 
 ---
@@ -115,6 +115,27 @@ python src/retrowave.py
 
 The window opens with a small demo waveform so you can start experimenting
 immediately.
+
+---
+
+## Development & tests
+
+A pytest suite lives under `tests/`:
+
+```bash
+python -m pytest          # run everything (~50 tests, < 1s)
+python -m pytest tests/test_model.py -k group   # run a subset
+```
+
+- `tests/test_model.py` — pure unit tests for `Model` (signal pool, group tree,
+  annotations, save/load + legacy-format migration). Every mutating test ends by
+  asserting the design-spec §2.6 invariants (`tests/conftest.py::assert_invariants`).
+- `tests/test_app_interactions.py` — smoke tests that drive the real `App` with
+  synthesized mouse events (paint, brush row-lock, BUS preservation, box-select
+  fill, pan mode, copy/paste, template insertion). A window briefly opens; the
+  whole suite shares one Tk root.
+
+Both `python -m pytest` and the `ast.parse` syntax check must pass before a commit.
 
 ---
 

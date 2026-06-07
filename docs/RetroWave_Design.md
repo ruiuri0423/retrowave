@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.19** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
+**Spec version: v1.20** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#14-changelog) at the end.
 
@@ -984,6 +984,16 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.20** — **Test safety net (internal; no behaviour change).** Added a pytest suite under
+  `tests/`: `test_model.py` (48 tests total) covers the signal pool / group tree / annotations /
+  persistence-and-migration paths of `Model`, and `test_app_interactions.py` drives the real
+  `App` with synthesized mouse events (paint, brush row-lock, BUS preservation, marquee fill,
+  pan mode, copy/paste, template insertion). Every mutating test ends by asserting the §2.6
+  invariants via a shared `assert_invariants()` helper (sid uniqueness, DFS-leaf-order sync,
+  group cache, no empty groups/markers, annotation validity, layout row count). The GUI tests
+  share one session-scoped Tk root (repeated create/destroy of Tk in one process trips Tcl's
+  `tcl_findLibrary`). Gate: `python -m pytest` must pass before every commit, in addition to the
+  `ast.parse` syntax check.
 - **v1.19** — **Pan clamping & name-column sync fix.** Pan-mode dragging now moves the view with
   `xview_moveto`/`yview_moveto` (fraction-based, anchored at the press point) instead of
   `scan_mark`/`scan_dragto`. tk's *scan* API ignores the scrollregion, so the canvas could be

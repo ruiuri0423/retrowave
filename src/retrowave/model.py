@@ -180,9 +180,12 @@ class Model:
         index = max(0, min(len(cont), index))
         marker = {"type": "_marker"}
         cont.insert(index, marker)
+        _t(f"step1: marker 插入 {container_gid or '頂層'}[{index}]")
         node = self._detach_sid(sid)
         if node is None:
+            _t("sid 不在樹中 -> 撤回 marker")
             cont.remove(marker); self._after_tree_change(); return False
+        _t(f"step2/3: 已摘下葉 sid={sid}，取代 marker")
         cont[cont.index(marker)] = node
         self._after_tree_change()
         return True
@@ -192,6 +195,7 @@ class Model:
         if self._find_group_node(gid) is None:
             return False
         if container_gid is not None and self._is_self_or_descendant(gid, container_gid):
+            _t(f"防呆: {container_gid} 是 {gid} 自己或其子孫，拒絕移動")
             return False
         cont = self._container_children(container_gid)
         if cont is None:
@@ -199,9 +203,12 @@ class Model:
         index = max(0, min(len(cont), index))
         marker = {"type": "_marker"}
         cont.insert(index, marker)
+        _t(f"step1: marker 插入 {container_gid or '頂層'}[{index}]")
         node = self._detach_group(gid)
         if node is None:
+            _t("群組不在樹中 -> 撤回 marker")
             cont.remove(marker); self._after_tree_change(); return False
+        _t(f"step2/3: 已摘下群組 {gid}，取代 marker")
         cont[cont.index(marker)] = node
         self._after_tree_change()
         return True
@@ -234,6 +241,7 @@ class Model:
             if nd.get("type") == "group":
                 self._prune_empty_groups(nd.get("children", []))
                 if not nd.get("children"):
+                    _t(f"剪除空群組 {nd.get('gid')}")
                     del nodes[i]; continue
             i += 1
 
@@ -242,6 +250,7 @@ class Model:
         present = set(order)
         for s in self.signals:                  # 保險：樹中遺漏的訊號補回頂層
             if s["sid"] not in present:
+                _t(f"修復: 樹漏列 sid={s['sid']} -> 補回頂層")
                 self.group_tree.append({"type": "sig", "sid": s["sid"]})
                 order.append(s["sid"]); present.add(s["sid"])
         by = {s["sid"]: s for s in self.signals}
@@ -283,9 +292,12 @@ class Model:
         sids = sorted(set(sids), key=lambda s: order.get(s, 1 << 30))
         if not sids:
             return None
+        _t(f"選取按葉序排序: sids={sids}")
         marker = {"type": "_marker"}
         self.group_tree.insert(self._top_index_of_sid(sids[0]), marker)
+        _t(f"marker 插在第一個成員 sid={sids[0]} 的頂層位置")
         children = [c for c in (self._detach_sid(s) for s in sids) if c]
+        _t(f"摘下 {len(children)} 葉作為新群組 children")
         gid = self.new_gid()
         node = {"type": "group", "gid": gid, "name": name or f"群組{self._gid_seq}",
                 "collapsed": False, "color": None, "children": children}
@@ -303,10 +315,12 @@ class Model:
         sids = sorted(set(sids), key=lambda s: order.get(s, 1 << 30))
         for s in sids:
             if self.signals[[x["sid"] for x in self.signals].index(s)].get("group") == target_gid:
+                _t(f"sid={s} 已在 {target_gid}，跳過")
                 continue
             node = self._detach_sid(s)
             if node:
                 tgt["children"].append(node)
+                _t(f"sid={s} 附加到 {target_gid} children 尾端")
         self._after_tree_change()
         return target_gid
 
@@ -325,6 +339,7 @@ class Model:
         if node is None:
             self._after_tree_change(); return None
         tgt["children"].append(node)
+        _t(f"群組 {src_gid} 整棵巢入 {target_gid} 成為子群組")
         self._after_tree_change()
         return target_gid
 
@@ -348,7 +363,9 @@ class Model:
                 if by.get(s):
                     by[s]["color"] = None
                 moved += 1
+                _t(f"sid={s} 重插於 marker 之後（頂層[{at + 1}]），清除自訂色")
         self.group_tree.remove(marker)
+        _t("移除 marker")
         self._after_tree_change()
         return moved
 
@@ -364,6 +381,7 @@ class Model:
                     rec(nd.get("children", []))
                     if nd["gid"] in gids:
                         kids = nd.get("children", [])
+                        _t(f"解散 {nd['gid']}：{len(kids)} 個 children 就地提升一層")
                         nodes[i:i + 1] = kids
                         i += len(kids); continue
                 i += 1
@@ -376,6 +394,7 @@ class Model:
         if node is None:
             return 0
         sids = {l["sid"] for l in self._dfs_leaves([node])}
+        _t(f"子樹葉 sids={sorted(sids)} 自訊號池移除")
         self.signals = [s for s in self.signals if s["sid"] not in sids]
         self._after_tree_change()
         self.prune_annotations()
@@ -416,6 +435,8 @@ class Model:
         valid_sids = {s.get("sid") for s in self.signals}
         orphan_nodes = [n for n, nd in self.nodes.items() if nd.get("sid") not in valid_sids]
         before_edges = len(self.edges)
+        if orphan_nodes:
+            _t(f"清除孤兒錨點 {orphan_nodes}（其 sid 已不存在）")
         for nid in orphan_nodes:
             self.remove_node(nid)
         self.edges = [e for e in self.edges
@@ -462,10 +483,13 @@ class Model:
                 cells.append(self.new_cell("L"))
             del cells[self.n_periods:]
             s["cells"] = cells
+        _t(f"載入 {len(self.signals)} 條訊號（n_periods={self.n_periods}，sid 序號還原至 {self._sid_seq}）")
         gt = d.get("group_tree")
         if gt is not None:                      # 新格式：直接採用群組樹
+            _t("新格式: 直接採用 group_tree")
             self.group_tree = gt
         else:                                   # 舊格式：扁平群組 -> 樹 (向後相容)
+            _t("舊格式: 扁平 groups -> 樹遷移")
             self._migrate_flat_to_tree(d.get("groups", {}))
         # 還原 gid 序號 (避免新建群組撞名)
         self._gid_seq = 0
@@ -490,40 +514,81 @@ class Model:
 # ============================================================================
 # 呼叫追蹤（閱讀/除錯用；RETROWAVE_TRACE=1 啟用，預設關閉、零開銷）
 # ----------------------------------------------------------------------------
-#   輸出格式（stderr）：> 進入（含截短的參數）、< 返回（僅在有回傳值時印）。
-#   縮排 = 呼叫深度，可直接看出 L0/L1/L2 分層呼叫鏈，例如：
-#     [model] > group_signals([1, 2], name='SPI')
-#     [model]   > _top_index_of_sid(2)
-#     [model]   < _top_index_of_sid -> 1
-#     [model]   > _detach_sid(2)
-#     [model]   ...
-#     [model]   > _after_tree_change()
-#     [model]     > _resync_signals()
+#   輸出（stderr），縮排 = 呼叫深度：
+#     >  進入（含參數）              <  返回（僅在有回傳值時印）
+#     .  方法內的細步（_t()：marker 三步驟、對帳修復、載檔階段…）
+#     ~  狀態差異（方法返回時自動 diff：樹形/池序/群組/標注/週期，
+#        只印有變的面向 — 每一步的「淨效果」一目了然，連樹中暫存的
+#        #marker 都看得見）
+#   範例：
+#     [model] > move_leaf_to(1, 'g1', 1)
+#     [model]   . step1: marker 插入 g1[1]
+#     [model]   > _detach_sid(1)
+#     [model]     ~ tree: [1, g1(2, #marker, 3)] -> [g1(2, #marker, 3)]
+#     [model]   . step2/3: 已摘下葉 sid=1，取代 marker
+#     ...
 # ============================================================================
 TRACE = os.environ.get("RETROWAVE_TRACE", "")
+_TRACE_ON = bool(TRACE) and TRACE != "0"
 _TRACE_SKIP = () if TRACE == "all" else ("layout", "new_cell")   # 高頻唯讀方法預設不追
+_DEPTH = [0]
 
 
 def _trace_repr(v, limit=48):
     r = repr(v)
-    return r if len(r) <= limit else r[:limit - 1] + "…"
+    return r #if len(r) <= limit else r[:limit - 1] + "…"
+
+
+def _t(msg):
+    """方法內的細步追蹤點；TRACE 關閉時為 no-op（一次旗標判斷的成本）。"""
+    if _TRACE_ON:
+        print(f"[model] {'  ' * _DEPTH[0]}. {msg}", file=sys.stderr)
+
+
+def _tree_repr(nodes):
+    """群組樹的單行精簡表示：葉=sid、群組=gid(children)、折疊=gid*、暫存=#marker。"""
+    parts = []
+    for nd in nodes:
+        t = nd.get("type")
+        if t == "group":
+            mark = "*" if nd.get("collapsed") else ""
+            parts.append(f"{nd.get('gid')}{mark}({_tree_repr(nd.get('children', []))})")
+        elif t == "sig":
+            parts.append(str(nd.get("sid")))
+        else:
+            parts.append("#marker")
+    return ", ".join(parts)
+
+
+def _snapshot(m):
+    return {
+        "tree": f"[{_tree_repr(m.group_tree)}]",
+        "pool": [s.get("sid") for s in m.signals],
+        "groups": sorted(m.groups),
+        "nodes": sorted(m.nodes),
+        "edges": len(m.edges),
+        "n_periods": m.n_periods,
+    }
 
 
 def _install_trace(cls):
-    depth = [0]
-
     def wrap(name, fn):
         @functools.wraps(fn)
         def traced(self, *a, **kw):
-            pad = "  " * depth[0]
+            pad = "  " * _DEPTH[0]
             args = ", ".join([_trace_repr(x) for x in a]
                              + [f"{k}={_trace_repr(v)}" for k, v in kw.items()])
             print(f"[model] {pad}> {name}({args})", file=sys.stderr)
-            depth[0] += 1
+            before = _snapshot(self)
+            _DEPTH[0] += 1
             try:
                 out = fn(self, *a, **kw)
             finally:
-                depth[0] -= 1
+                _DEPTH[0] -= 1
+            after = _snapshot(self)
+            for key, prev in before.items():
+                if prev != after[key]:
+                    print(f"[model] {pad}  ~ {key}: {prev} -> {after[key]}", file=sys.stderr)
             if out is not None:
                 print(f"[model] {pad}< {name} -> {_trace_repr(out)}", file=sys.stderr)
             return out
@@ -535,5 +600,5 @@ def _install_trace(cls):
         setattr(cls, name, wrap(name, fn))
 
 
-if TRACE and TRACE != "0":
+if _TRACE_ON:
     _install_trace(Model)

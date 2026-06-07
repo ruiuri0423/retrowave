@@ -1,5 +1,9 @@
 # RetroWave — Design Specification
 
+**Spec version: v1.17** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
+header, the program version string, and `README.md` in lock-step on every change. See the
+[Changelog](#14-changelog) at the end.
+
 > A complete, implementation-ready design document for the **RetroWave** digital-waveform
 > editor. It is written so that an engineer (or model) who has never seen the original code can
 > rebuild the product faithfully in any stack (e.g. **React + SVG/CSS**).
@@ -938,6 +942,52 @@ interaction layer separately since its branches are event-driven.
 - [x] Exports: **PNG 1–4×** (sharp re-render), **SVG** (vector, dashes preserved), **EPS/PS**,
       **WaveDrom JSON** (nested groups, phase, node/edge; colors/slope intentionally not preserved).
 - [x] JSON persistence with **legacy-flat→tree migration** and orphan-annotation pruning + report.
+
+---
+
+## 14. Changelog
+
+Versioned to match the `retrowave.py` implementation. Newest first. When adding a feature or
+changing behaviour, bump the version in three places — the program string, this spec's header, and
+`README.md` — and add a line here.
+
+- **v1.17** — Fixed the offset BUS left-edge **closing chevron slope**: a half-swing transition is
+  `tw/2` wide (slope `swing/tw`), not `tw`; now matches every other bus edge for both small and
+  large offsets (clips at the left border when the chevron starts off-screen).
+- **v1.16** — Nested groups **step 2**: name-column drag upgraded from reorder-only to
+  reorder / merge-into-group / move-out / nest, resolved by *container + insertion index* (combine
+  and reorder in one gesture); focus overlay (dim background, lit target container, insertion line);
+  cycle guard; **off-by-one on downward drag fixed** via the marker insert-before-detach technique.
+- **v1.15** — Nested groups **step 1**: introduced the **group tree** (arbitrary depth) as the
+  structural source of truth with `signals` kept in DFS-leaf order and `signal["group"]` as an
+  immediate-parent cache; recursive `layout()` with depth indent and ancestor color cascade; nested
+  collapse; create-nesting via right-click; legacy-flat→tree load migration; nested WaveDrom export.
+- **v1.14** — Offset BUS left edge changed from parallel rails to a **closing chevron** that meets
+  the first cell's opening at a value boundary (slope corrected later in v1.17).
+- **v1.13** — Drag reorder (single-level): signal reorder within its group/no-group range and
+  group-block reorder, with dim + insertion-line feedback.
+- **v1.13** — Delete group (with all members); absolute **group-wide offset**; **WaveDrom JSON**
+  export (groups→nested arrays, offset→phase, anchors/edges→node/edge).
+- **v1.12** — Fixed export-scale property name clash with the canvas `scale` method (renamed to
+  `export_scale`, defensive numeric read); annotations again render on screen.
+- **v1.11** — **PNG 1–4× resolution** (true high-density re-render) and **SVG vector export** via a
+  dedicated SVG drawing surface (dashed grid preserved); PNG height fixed to use `len(layout())`.
+- **v1.10** — Orphan-annotation pruning reported in the status bar on load; relationship-line
+  **arrow styles** (double / single / measure) switchable from the edge right-click menu.
+- **v1.9**  — Fixed missing `sid` on template-insert / paste (which made anchors attach to the wrong
+  signal); clearer arrowheads; connect-drag freeze veil changed to light gray.
+- **v1.8**  — **Annotations**: sid-pinned anchors + relationship lines; create via right-click;
+  hover highlight; drag-to-connect with freeze overlay; `Delete` to remove.
+- **v1.7**  — Phase C: group-level copy/paste and a template library (import templates, insert as a
+  group).
+- **v1.6**  — Explicit create / merge / move-out / dissolve group actions; group color cascades to
+  members.
+- **v1.4–1.5** — Single-level groups via a view-layer `layout()`; group merge semantics.
+- **v1.3**  — Recolor / offset moved into the right-click menu.
+- **v1.2**  — Per-signal color; signal-level copy/paste.
+- **v1.1**  — PNG export switched to a bitmap surface (no Ghostscript dependency).
+- **v0.1–1.0** — Foundation: element hierarchy, unified slope, joins (`MEET`), box-select,
+  copy/paste, per-signal offset with edge extension.
 
 ---
 

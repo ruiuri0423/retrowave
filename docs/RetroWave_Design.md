@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.20** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
+**Spec version: v1.21** &nbsp;·&nbsp; tracks the `retrowave.py` implementation version. Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#14-changelog) at the end.
 
@@ -295,6 +295,14 @@ Notes:
 ---
 
 ## 6. Waveform rendering
+
+**Render scheduling (coalescing).** Interaction code never calls `render()` directly; it calls
+`request_render()`, which schedules a single redraw via `after_idle` and de-duplicates: any number
+of requests inside one event-loop cycle produce exactly one repaint at idle time. A synchronous
+`render()` cancels a pending request (so no double paint follows). Only two cases bypass the
+queue and render synchronously: the very first paint in `__init__` (so the window appears fully
+drawn) and the EPS export, which snapshots the live canvas with tk's `postscript` writer
+immediately after redrawing without the selection highlight.
 
 The engine renders the whole scene to two surfaces (name + wave). High-level flow:
 
@@ -984,6 +992,13 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.21** — **Render coalescing.** All 46 interaction call sites now go through
+  `request_render()` (dirty scheduling via `after_idle`): bursts of mutations inside one
+  event-loop cycle repaint once instead of once per call, with no change to the drawing code.
+  A synchronous `render()` cancels any pending request. Two call sites intentionally stay
+  synchronous: the first paint in `__init__` and the EPS export (tk `postscript` snapshots the
+  live canvas). See the new "Render scheduling" note at the top of §6. Covered by
+  `tests/test_render_coalescing.py` (burst→1 draw, cancel-on-sync, paint-drag equivalence).
 - **v1.20** — **Test safety net (internal; no behaviour change).** Added a pytest suite under
   `tests/`: `test_model.py` (48 tests total) covers the signal pool / group tree / annotations /
   persistence-and-migration paths of `Model`, and `test_app_interactions.py` drives the real

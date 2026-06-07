@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.20**. Single-file application (`retrowave.py`), no
+> Status: prototype **v1.21**. Single-file application (`retrowave.py`), no
 > third-party dependencies required to run (Pillow is optional, only for PNG export).
 
 ---
@@ -134,6 +134,9 @@ python -m pytest tests/test_model.py -k group   # run a subset
   synthesized mouse events (paint, brush row-lock, BUS preservation, box-select
   fill, pan mode, copy/paste, template insertion). A window briefly opens; the
   whole suite shares one Tk root.
+- `tests/test_render_coalescing.py` — verifies that bursts of UI mutations inside
+  one event-loop cycle repaint the canvas exactly once (`request_render()`
+  scheduling) and that the final picture matches the synchronous behavior.
 
 Both `python -m pytest` and the `ast.parse` syntax check must pass before a commit.
 

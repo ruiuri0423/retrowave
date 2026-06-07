@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-RetroWave - 數位電路波型繪製工具 (原型 v1.20)
+RetroWave - 數位電路波型繪製工具 (原型 v1.21)
 本版重點 :
   1. 所有轉換線斜率統一 = 擺幅/tw (BUS↔HiZ 不再不一致)。
   2/3/4. BUS 拖曳：原為 BUS 的格保留延續、非 BUS 的格才取代 (不蓋既有資料)。
@@ -1117,7 +1117,7 @@ class TemplateLibrary:
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("RetroWave - 數位波型繪製工具  v1.20")
+        self.title("RetroWave - 數位波型繪製工具  v1.21")
         self.geometry("1160x660"); self.minsize(900, 470)
         self.configure(bg=Style.FACE)
         self.model = Model(); self.geom = Geometry(); self.engine = Engine()
@@ -1129,6 +1129,7 @@ class App(tk.Tk):
         self._press = None; self._press_xy = (0, 0); self._moved = False
         self._marquee = None; self._selecting = False; self._panning = False
         self._pan_anchor = None
+        self._render_job = None                 # 待執行的合併重繪 (after_idle id)
         self._drag_value = None; self._hover = None
         self._hover_node = None; self._hover_edge = None
         self._connecting = False; self._connect_from = None; self._connect_xy = None
@@ -1137,7 +1138,7 @@ class App(tk.Tk):
         self.lib = TemplateLibrary()
         self._build_menubar(); self._build_toolbar(); self._build_main()
         self._build_statusbar(); self._bind_keys()
-        self._set_tool("H"); self.render()
+        self._set_tool("H"); self.render()          # 首次繪製須同步，視窗一出現即完整
         self.after(150, self._startup_templates)    # 視窗顯示後再載入範本/提示缺檔
 
     def _build_menubar(self):
@@ -1270,7 +1271,7 @@ class App(tk.Tk):
         sids = {c["sid"] for c in children}
         newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
         self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
-        self.render()
+        self.request_render()
         self.status.configure(text=f" 已插入範本「{gname}」（{len(children)} 條，已成群組）")
 
     def _build_toolbar(self):
@@ -1308,14 +1309,14 @@ class App(tk.Tk):
             self.geom.ramp_ratio = max(0.02, min(0.45, float(self.sp_r.get()) / 100.0))
         except ValueError:
             return
-        self.render()
+        self.request_render()
 
     def _apply_periods(self):
         try:
             n = max(1, int(float(self.sp_p.get())))
         except ValueError:
             return
-        self.model.set_n_periods(n); self.cell_sel = None; self.render()
+        self.model.set_n_periods(n); self.cell_sel = None; self.request_render()
 
     def set_offset_dialog(self):
         if not self.model.signals:
@@ -1328,7 +1329,7 @@ class App(tk.Tk):
         for s in (self.sig_sel or {self.selected}):
             if 0 <= s < len(self.model.signals):
                 self.model.signals[s]["offset"] = round(v, 2)
-        self.render()
+        self.request_render()
 
     def _refresh_offset_field(self):
         pass            # 位移已移至右鍵選單，無常駐欄位
@@ -1410,14 +1411,14 @@ class App(tk.Tk):
             self._fill_selection(t); return
         self.active_tool = t; self._refresh_tools()
         self.wave_cv.configure(cursor="")
-        self.render()
+        self.request_render()
 
     def _enter_pan_mode(self):
         """Esc：任何狀態皆退回畫布拖曳模式（清除框選、取消元件選擇）。"""
         self.cell_sel = None
         self.active_tool = None; self._refresh_tools()
         self.wave_cv.configure(cursor="fleur")
-        self.render()
+        self.request_render()
 
     def _refresh_tools(self):
         for k, b in self.tool_btns.items():
@@ -1426,7 +1427,7 @@ class App(tk.Tk):
 
     def _clear_cell_sel(self):
         if self.cell_sel is not None:
-            self.cell_sel = None; self.render()
+            self.cell_sel = None; self.request_render()
 
     def _fill_rect(self, sel, t):
         s0, s1, p0, p1 = sel
@@ -1449,7 +1450,7 @@ class App(tk.Tk):
             return
         msg = self._fill_rect(self.cell_sel, t)
         if msg:
-            self.render(); self.status.configure(text=" " + msg + "（選取保留，Esc 清除）")
+            self.request_render(); self.status.configure(text=" " + msg + "（選取保留，Esc 清除）")
 
     def _update_status(self):
         if self.active_tool is None:
@@ -1465,7 +1466,20 @@ class App(tk.Tk):
             text=f" 筆刷:{self.active_tool} | {hint} | Shift/Ctrl拖曳=框選(按元件鍵填入/Ctrl+C複製) "
                  f"| 名稱Ctrl/Shift多選 -> 右鍵: 調色/位移/刪除 | Esc=拖曳模式 | 週期{self.model.n_periods}")
 
+    def request_render(self):
+        """合併重繪：同一事件迴圈周期內的多次請求，只在 idle 時重繪一次。
+        互動程式碼一律呼叫本方法；只有「接著要同步讀取畫布內容」(如 EPS 匯出的
+        postscript 快照、__init__ 首繪) 才直接呼叫 render()。"""
+        if self._render_job is None:
+            self._render_job = self.after_idle(self._render_now)
+
+    def _render_now(self):
+        self._render_job = None
+        self.render()
+
     def render(self):
+        if self._render_job is not None:        # 同步重繪 -> 取消尚未執行的合併請求
+            self.after_cancel(self._render_job); self._render_job = None
         self.name_cv.configure(width=self.geom.name_w)
         self.engine.draw(self.name_cv, self.wave_cv, self.model, self.sig_sel, self.geom, self.cell_sel)
         # 內容縮回視窗範圍內（刪列/收合群組等）時，把該軸拉回原點並保持名稱欄同步
@@ -1586,7 +1600,7 @@ class App(tk.Tk):
         he = self._edge_at_xy(cx, cy) if hv is None else None
         if hv != self._hover_node or he != self._hover_edge:
             self._hover_node = hv; self._hover_edge = he
-            self.render()
+            self.request_render()
 
     def on_press(self, e):
         self.wave_cv.focus_set()
@@ -1603,7 +1617,7 @@ class App(tk.Tk):
             self._connecting = True; self._connect_from = nid
             self._connect_xy = (cx, cy); self._press = None
             self._selecting = False; self._moved = False
-            self.render(); return
+            self.request_render(); return
         self._press = self._cell_from_xy(cx, cy)
         self._moved = False
         self._selecting = ctrl or shift          # Shift/Ctrl 拖曳皆為純框選
@@ -1620,7 +1634,7 @@ class App(tk.Tk):
                 self._drag_value = ""
         self._erase_marquee()
         if self.cell_sel is not None:
-            self.cell_sel = None; self.render()
+            self.cell_sel = None; self.request_render()
 
     def on_motion(self, e):
         if self._panning:
@@ -1641,7 +1655,7 @@ class App(tk.Tk):
             self._connect_xy = (cx, cy)
             hv = self._node_at_xy(cx, cy)
             self._hover_node = hv if hv != self._connect_from else None
-            self.render(); return
+            self.request_render(); return
         if self._selecting:
             self._moved = True
             self._draw_marquee(self._press_xy, (cx, cy))
@@ -1653,7 +1667,7 @@ class App(tk.Tk):
             p0, p1 = sorted((self._press[1], p_cur))
             for p in range(p0, p1 + 1):
                 self._paint_cell(s, p, self.active_tool, self._drag_value)
-            self.render()
+            self.request_render()
 
     def on_release(self, e):
         if self._panning:
@@ -1669,7 +1683,7 @@ class App(tk.Tk):
                 label = simpledialog.askstring("關係線", "標籤 (可留空，例如 t_su):", parent=self) or ""
                 self.model.add_edge(frm, target, label)
                 self.status.configure(text=f" 已建立關係線 {frm} → {target}")
-            self.render(); return
+            self.request_render(); return
         if self._selecting:
             a = self._cell_from_xy(*self._press_xy, clamp=True)
             b = self._cell_from_xy(cx, cy, clamp=True)
@@ -1677,13 +1691,13 @@ class App(tk.Tk):
                 s0, s1 = sorted((a[0], b[0])); p0, p1 = sorted((a[1], b[1]))
                 self.cell_sel = (s0, s1, p0, p1)
                 self._copy_ctx = "cells"
-            self._erase_marquee(); self.render()
+            self._erase_marquee(); self.request_render()
             if self.cell_sel:
                 self.status.configure(text=" 已框選；按元件鍵填入、或 Ctrl+C 複製")
         else:
             if not self._moved and self._press:
                 self._click_cell(*self._press)
-            self.render()
+            self.request_render()
 
     def on_wave_menu(self, e):
         cx, cy = self._ev_xy(e)
@@ -1711,7 +1725,7 @@ class App(tk.Tk):
                 m.add_command(label="在此建立錨點", command=lambda: self._add_node_at(cx, cy))
                 m.add_separator()
                 m.add_command(label="清成 L",
-                              command=lambda cc=c: (self.model.set_cell(cc[0], cc[1], "L"), self.render()))
+                              command=lambda cc=c: (self.model.set_cell(cc[0], cc[1], "L"), self.request_render()))
         try:
             m.tk_popup(e.x_root, e.y_root)
         finally:
@@ -1733,30 +1747,30 @@ class App(tk.Tk):
             return
         si, p, edge = ce
         nid = self.model.add_node(self.model.signals[si].get("sid"), p, edge)
-        self.render(); self.status.configure(text=f" 已建立錨點 {nid}（拖曳錨點可拉關係線；Del 刪除）")
+        self.request_render(); self.status.configure(text=f" 已建立錨點 {nid}（拖曳錨點可拉關係線；Del 刪除）")
 
     def _del_node(self, nid):
         self.model.remove_node(nid)
         if self._hover_node == nid:
             self._hover_node = None
-        self.render(); self.status.configure(text=f" 已刪除錨點 {nid}")
+        self.request_render(); self.status.configure(text=f" 已刪除錨點 {nid}")
 
     def _edit_edge(self, i):
         if 0 <= i < len(self.model.edges):
             cur = self.model.edges[i].get("label", "")
             new = simpledialog.askstring("關係線標籤", "標籤:", initialvalue=cur, parent=self)
             if new is not None:
-                self.model.edges[i]["label"] = new; self.render()
+                self.model.edges[i]["label"] = new; self.request_render()
 
     def _del_edge(self, i):
         if 0 <= i < len(self.model.edges):
             del self.model.edges[i]; self._hover_edge = None
-            self.render(); self.status.configure(text=" 已刪除關係線")
+            self.request_render(); self.status.configure(text=" 已刪除關係線")
 
     def _set_edge_style(self, i, style):
         if 0 <= i < len(self.model.edges):
             self.model.edges[i]["style"] = style
-            self.render()
+            self.request_render()
             self.status.configure(text=f" 關係線樣式：{ {'double':'雙箭頭','single':'單箭頭因果','measure':'無箭頭量測'}[style] }")
 
     def _del_hovered_annot(self):
@@ -1853,7 +1867,7 @@ class App(tk.Tk):
             newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in set(new_sids)]
             self.selected = newidx[0]
             self.sig_sel = set(newidx); self._sig_anchor = newidx[0]
-            self._refresh_offset_field(); self.render()
+            self._refresh_offset_field(); self.request_render()
             self.status.configure(text=f" 已貼上 {len(self.clip_signals)} 條訊號（複本未分組）")
         elif self._clip_kind == "cells" and self.clip:
             s0, p0 = self._hover or (self.selected, 0)
@@ -1862,7 +1876,7 @@ class App(tk.Tk):
             for ds, row in enumerate(self.clip):
                 for dp, c in enumerate(row):
                     self.model.set_cell(s0 + ds, p0 + dp, c["type"], c.get("text", ""))
-            self.render(); self.status.configure(text=f" 已貼上波形於 訊號{s0} T{p0}")
+            self.request_render(); self.status.configure(text=f" 已貼上波形於 訊號{s0} T{p0}")
 
     # ---- 調色 ----
     def pick_color(self):
@@ -1877,13 +1891,13 @@ class App(tk.Tk):
             for s in (self.sig_sel or {self.selected}):
                 if 0 <= s < len(self.model.signals):
                     self.model.signals[s]["color"] = hx
-            self.render()
+            self.request_render()
 
     def clear_color(self):
         for s in (self.sig_sel or {self.selected}):
             if 0 <= s < len(self.model.signals):
                 self.model.signals[s]["color"] = None
-        self.render()
+        self.request_render()
 
     # ---- marquee ----
     def _draw_marquee(self, xy0, xy1):
@@ -1918,7 +1932,7 @@ class App(tk.Tk):
             self._drag_kind = "group" if item[0] == "group" else "sig"
             self._drag_ref = item[1]
         self._compute_drop(cy)
-        self.render()
+        self.request_render()
 
     def on_name_release(self, e):
         if self._dragging:
@@ -1938,7 +1952,7 @@ class App(tk.Tk):
                                           ("（巢狀為子群組）" if tgt["container"] else "（頂層）"))
             self._dragging = False; self._drop = None; self._drop_target = None
             self._name_press = None
-            self._refresh_offset_field(); self.render()
+            self._refresh_offset_field(); self.request_render()
         else:
             self._name_press = None
             self._name_click(e)
@@ -1965,7 +1979,7 @@ class App(tk.Tk):
         if not self.sig_sel:
             self.sig_sel = {s}
         self._copy_ctx = "signals"
-        self._refresh_offset_field(); self.render()
+        self._refresh_offset_field(); self.request_render()
 
     # ---- 拖曳落點解析 (容器 + 插入索引)、容器高亮、插入線 ----
     def _group_visible_span(self, rows, gid):
@@ -2093,7 +2107,7 @@ class App(tk.Tk):
         s = item[1]                          # ---- 訊號選單 ----
         if s not in self.sig_sel:
             self.sig_sel = {s}; self.selected = s; self._sig_anchor = s
-            self.render()
+            self.request_render()
         self._copy_ctx = "signals"
         n = len(self.sig_sel)
         scope = f"（{n} 條）" if n > 1 else ""
@@ -2127,7 +2141,7 @@ class App(tk.Tk):
             new = simpledialog.askstring("改名", "訊號名稱:",
                                          initialvalue=self.model.signals[s]["name"], parent=self)
             if new:
-                self.model.signals[s]["name"] = new; self.render()
+                self.model.signals[s]["name"] = new; self.request_render()
 
     def on_name_rename(self, e):
         item = self._resolve_row(self.name_cv.canvasy(e.y))
@@ -2152,7 +2166,7 @@ class App(tk.Tk):
         if gid:
             newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
             self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
-            self.render()
+            self.request_render()
             nm = self.model.groups.get(gid, {}).get("name", gid)
             self.status.configure(text=f" 已建立群組「{nm}」（{len(newidx)} 條）；點標頭可折疊")
 
@@ -2166,13 +2180,13 @@ class App(tk.Tk):
         nm = self.model.groups.get(target_gid, {}).get("name", target_gid)
         newpos = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
         self.sig_sel = set(newpos); self.selected = newpos[0]; self._sig_anchor = newpos[0]
-        self.render()
+        self.request_render()
         self.status.configure(text=f" 已併入群組「{nm}」（{len(newpos)} 條）")
 
     def _merge_group_into(self, src_gid, target_gid):
         res = self.model.merge_groups(src_gid, target_gid)
         if res:
-            self.render()
+            self.request_render()
             self.status.configure(
                 text=f" 已將群組巢狀至「{self.model.groups.get(target_gid, {}).get('name', target_gid)}」")
         else:
@@ -2182,13 +2196,13 @@ class App(tk.Tk):
         idxs = sorted(i for i in (self.sig_sel or {self.selected})
                       if 0 <= i < len(self.model.signals))
         moved = self.model.remove_from_group(idxs)
-        self.render()
+        self.request_render()
         self.status.configure(text=(f" 已移出 {moved} 條訊號（顏色回預設）" if moved
                                     else " 選取的訊號不在任何群組中"))
 
     def _dissolve_group(self, gid):
         self.model.ungroup([gid])           # 解散：children 提升一層 (保留巢狀子群組)
-        self.render()
+        self.request_render()
         self.status.configure(text=" 已解散群組（成員/子群組保留、提升一層）")
 
     def _delete_group(self, gid):
@@ -2205,7 +2219,7 @@ class App(tk.Tk):
         else:
             self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
         self.cell_sel = None; self._hover_node = None; self._hover_edge = None
-        self.render()
+        self.request_render()
         self.status.configure(text=f" 已刪除群組「{nm}」及 {n} 條訊號")
 
     def _offset_group(self, gid):
@@ -2222,7 +2236,7 @@ class App(tk.Tk):
             return
         for s in members:
             s["offset"] = round(v, 2)
-        self.render()
+        self.request_render()
         self.status.configure(text=f" 群組整組位移設為 {round(v,2)}（{len(members)} 條）")
 
     def _copy_group(self, gid):
@@ -2265,13 +2279,13 @@ class App(tk.Tk):
         sids = {c["sid"] for c in children}
         newidx = [i for i, s in enumerate(self.model.signals) if s["sid"] in sids]
         self.sig_sel = set(newidx); self.selected = newidx[0]; self._sig_anchor = newidx[0]
-        self.render()
+        self.request_render()
         self.status.configure(text=f" 已貼上群組「{gname}」（{len(children)} 條，新群組於底部）")
 
     def _toggle_group(self, gid):
         meta = self.model.groups.get(gid)
         if meta is not None:
-            meta["collapsed"] = not meta.get("collapsed", False); self.render()
+            meta["collapsed"] = not meta.get("collapsed", False); self.request_render()
 
     def _rename_group(self, gid):
         meta = self.model.groups.get(gid)
@@ -2279,7 +2293,7 @@ class App(tk.Tk):
             new = simpledialog.askstring("群組改名", "群組名稱:",
                                          initialvalue=meta.get("name", gid), parent=self)
             if new:
-                meta["name"] = new; self.render()
+                meta["name"] = new; self.request_render()
 
     def _color_group(self, gid):
         meta = self.model.groups.get(gid)
@@ -2291,12 +2305,12 @@ class App(tk.Tk):
         except Exception:
             hx = None
         if hx:
-            meta["color"] = hx; self.render()
+            meta["color"] = hx; self.request_render()
 
     def add_signal(self):
         self.model.add_signal(); self.selected = len(self.model.signals) - 1
         self.sig_sel = {self.selected}; self._sig_anchor = self.selected
-        self._refresh_offset_field(); self.render()
+        self._refresh_offset_field(); self.request_render()
 
     def del_signal(self):
         if not self.model.signals:
@@ -2316,14 +2330,14 @@ class App(tk.Tk):
             self.sig_sel = {self.selected}; self._sig_anchor = self.selected
         else:
             self.selected = 0; self.sig_sel = set(); self._sig_anchor = None
-        self.cell_sel = None; self._refresh_offset_field(); self.render()
+        self.cell_sel = None; self._refresh_offset_field(); self.request_render()
 
     def do_new(self):
         if messagebox.askyesno("新增", "清空目前內容並新建？"):
             self.model = Model(); self.selected = 0; self.sig_sel = {0}; self._sig_anchor = 0
             self.cell_sel = None; self.clip = None
             self.sp_p.delete(0, tk.END); self.sp_p.insert(0, str(self.model.n_periods))
-            self._refresh_offset_field(); self.render()
+            self._refresh_offset_field(); self.request_render()
 
     def do_save(self):
         path = filedialog.asksaveasfilename(defaultextension=".json",
@@ -2352,7 +2366,7 @@ class App(tk.Tk):
             self.selected = 0; self.sig_sel = {0}; self._sig_anchor = 0
             self.cell_sel = None
             self._hover_node = None; self._hover_edge = None
-            self._refresh_offset_field(); self.render()
+            self._refresh_offset_field(); self.request_render()
             cn, ce = cleared or (0, 0)
             if cn or ce:
                 self.status.configure(
@@ -2391,7 +2405,7 @@ class App(tk.Tk):
             except Exception as ex:
                 messagebox.showerror("匯出失敗", str(ex))
         else:                                   # EPS / PS：tkinter 內建，無需任何套件
-            sel = self.cell_sel; self.cell_sel = None; self.render()
+            sel = self.cell_sel; self.cell_sel = None; self.render()   # postscript 直接快照畫布，須同步重繪
             self.wave_cv.postscript(file=path, colormode="color",
                                     x=0, y=0, width=wave_w, height=total_h)
             self.cell_sel = sel; self.render()
@@ -2553,7 +2567,7 @@ class App(tk.Tk):
             "雙擊名稱 改名")
 
     def help_about(self):
-        messagebox.showinfo("關於", "RetroWave v1.20\n數位電路波型繪製工具\nPython + tkinter")
+        messagebox.showinfo("關於", "RetroWave v1.21\n數位電路波型繪製工具\nPython + tkinter")
 
 
 if __name__ == "__main__":

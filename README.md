@@ -5,7 +5,7 @@ built entirely on Python's standard-library `tkinter`. Draw clocks, buses, and
 logic-level signals, organize them into collapsible groups, reuse them as
 templates, and export to PNG, SVG or EPS.
 
-> Status: prototype **v1.22**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.23**. A small Python package (`src/retrowave/`) with strict
 > layering — logic and drawing modules are fully headless; only `app.py` touches tkinter.
 > No third-party dependencies required to run (Pillow is optional, only for PNG export).
 
@@ -143,6 +143,10 @@ python -m pytest tests/test_model.py -k group   # run a subset
 - `tests/test_render_coalescing.py` — verifies that bursts of UI mutations inside
   one event-loop cycle repaint the canvas exactly once (`request_render()`
   scheduling) and that the final picture matches the synchronous behavior.
+- `tests/test_module_boundaries.py` — enforces the layering: every module except
+  `app.py` must be importable without `tkinter` entering `sys.modules`.
+- `tests/test_export.py` — headless export tests: SVG structure, exact WaveDrom
+  wave strings, PNG pixel dimensions (skipped without Pillow).
 
 Both `python -m pytest` and the `ast.parse` syntax check must pass before a commit.
 

@@ -9,7 +9,8 @@ import retrowave
 
 SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 
-CORE_MODULES = ["theme", "geometry", "model", "elements", "engine", "backends", "templates"]
+CORE_MODULES = ["theme", "geometry", "model", "elements", "engine", "backends",
+                "templates", "export"]
 
 
 def test_core_and_drawing_modules_are_headless():

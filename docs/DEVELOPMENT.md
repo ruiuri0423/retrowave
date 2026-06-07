@@ -33,6 +33,7 @@ src/retrowave/
 ├── elements.py    WAVE_TYPES, *Element     繪圖單元（六種元件演算法）
 ├── engine.py      Engine                   繪圖單元（單一繪製流程）
 ├── backends.py    PILCanvas, SVGCanvas     繪圖單元（PNG/SVG 匯出後端）
+├── export.py      export_png/svg/wavedrom  繪圖單元（匯出管線，純函式）
 ├── app.py         App, make_key_button     UI 殼層（唯一 tkinter 使用者）
 ├── __init__.py    __version__ + re-export（UI 名稱 PEP 562 延遲載入）
 └── __main__.py    python -m retrowave
@@ -58,7 +59,7 @@ src/retrowave/
 | §8.1a 拖曳模式 | `App._enter_pan_mode`、`_scrollable` | 逐軸計算，內容未超出視窗則鎖原點 |
 | §8.2–8.4 名稱欄拖曳 | `App.on_name_press` / `on_name_drag` / `on_name_release`、`_compute_drop` | marker 三步驟在 `Model.move_leaf_to` / `move_group_to` |
 | §8.5 複製貼上 | `App.do_copy` / `do_paste`、`_paste_group` | 複本一律配發新 sid |
-| §9 匯出 | `App.do_export`、`_export_png` / `_export_svg` / `_export_wavedrom` | EPS 用 `wave_cv.postscript`（須同步 render） |
+| §9 匯出 | `export.py`：`export_png` / `svg_string` / `export_svg` / `wavedrom_dict` / `export_wavedrom`（純函式）；`App.do_export` 只留對話框 | EPS 例外留在 app（`wave_cv.postscript` 快照畫布，須同步 render） |
 | §10 持久化/遷移 | `Model.to_dict` / `load_dict` / `_migrate_flat_to_tree` | 舊扁平格式 → 樹 |
 | §11 UI 結構 | `App._build_menubar` / `_build_toolbar` / `_build_main` / `_build_statusbar` | |
 | §14 UI↔Core protocol | （目標架構，見下方 §5） | 尚未實作，遷移路線見 §6 |
@@ -111,7 +112,7 @@ src/retrowave/
 | 版本 | 內容 | 驗收門檻 |
 |---|---|---|
 | **v1.22** ✅ | **套件拆分**：`src/retrowave.py` → `src/retrowave/` 套件（`model` / `elements` / `engine` / `backends` / `templates` / `geometry` / `theme` / `app`），行為零變更 | 既有測試原樣全綠 + `test_module_boundaries.py`（headless 子行程鐵證、AST 禁 tkinter、re-export 完整、版本單一來源） |
-| **v1.23** | **匯出抽離**：`_export_png/svg/wavedrom` → `export.py` 純函式 `(model, geom) → file` | 新增匯出單元測試（SVG 內容、WaveDrom schema、PNG 尺寸） |
+| **v1.23** ✅ | **匯出抽離**：`_export_png/svg/wavedrom` → `export.py` 純函式 `(model, geom) → file` | `test_export.py`（SVG 結構/虛線/位移寬度、WaveDrom 波形字串/巢狀群組/phase/edge、PNG 2× 尺寸） |
 | **v1.24** | **命令層**：`document.py` 實作 §14.3 命令目錄 + §14.4 change events；App 全部改走命令；消除上表違規 | 邊界測試：App 原始碼不得出現 `model._` 與直接結構操作；命令層 headless 測試 |
 | **v1.25** | **Undo/Redo**：快照式（§14.5），`Ctrl+Z/Y` | 手勢級 undo 測試（一次筆刷 = 一步） |
 | 後續 | 增量重繪（dirty rows，靠 §14.4 scope）、App controller 拆分、VCD import | — |

@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.22** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.23** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -1084,6 +1084,15 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.23** — **Export pipeline extracted (internal; no behaviour change).** PNG / SVG /
+  WaveDrom exports moved out of the UI shell into `export.py` as pure functions
+  (`export_png(model, geom, path, scale)`, `svg_string`/`export_svg`,
+  `wavedrom_dict`/`export_wavedrom`); the shell keeps only file dialogs and message boxes.
+  EPS stays in the shell by design (it snapshots the live canvas via tk `postscript`, §9.3).
+  Exports are now headless-testable: `tests/test_export.py` (7 tests) pins the SVG structure
+  (dashed grid preserved, offset widens the canvas), exact WaveDrom wave strings
+  (`0.=.=z=10...` for the demo DATA row), group nesting, phase sign, node/edge mapping, and
+  PNG pixel dimensions at 2×.
 - **v1.22** — **Package split (internal; no behaviour change).** The single file became the
   `retrowave` package with strict layering: shared base (`theme`, `geometry`), logic unit
   (`model`, `templates`), drawing unit (`elements`, `engine`, `backends`), and the UI shell

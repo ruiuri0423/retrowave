@@ -132,6 +132,29 @@ src/retrowave/
 - 選取/hover 等暫態與文件內容混在 App 屬性裡 — 命令層引入時順勢歸類（§14.1）。
 - PNG 匯出的虛線網格目前是實線（PIL 後端無 dash）— roadmap 既有項目。
 
+## 6.1 發佈與簽章（防毒 / SmartScreen）
+
+**為什麼會被攔**：PyInstaller onefile 啟動時自解壓到 temp（行為近似 dropper）、
+bootloader 指紋被部分引擎列為可疑、未簽章新檔案無下載信譽 → SmartScreen 預設警告。
+
+**workflow 已內建的緩解**（`.github/workflows/release.yml`）：
+- 嵌入版本資訊中繼資料（CompanyName/FileDescription/版本，無中繼資料是啟發式扣分項）、`--noupx`
+- 同步發佈 **onedir zip**（不自解壓，誤判率遠低於 onefile）與 `SHA256SUMS.txt` 校驗檔
+
+**程式碼簽章（治本）**：憑證必須向 CA 申請，**無法自行生成；自簽憑證對 SmartScreen 無效**。
+取得憑證後設定兩個 repo secrets 即自動簽章（含 RFC3161 時間戳記），workflow 不需再改：
+
+| Secret | 內容 |
+|---|---|
+| `CODESIGN_PFX_BASE64` | PFX 憑證檔的 base64（`[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))`） |
+| `CODESIGN_PFX_PASSWORD` | PFX 密碼 |
+
+憑證選項（依成本）：**SignPath Foundation**（開源專案免費，本 repo 為 MIT 符合資格，建議首選）→
+Azure Trusted Signing（~US$10/月）→ OV（Certum 開源 ~€69/年；信譽仍需下載量累積）→
+EV（~US$250+/年，立即通過 SmartScreen）。
+另外：誤判可向各防毒廠商回報 false positive（Microsoft Defender 有專屬提交頁），
+發佈後用 VirusTotal 檢查誤判面。
+
 ## 7. Model 函式分類（值 / 算 / 流）
 
 > 目的：不拆類的前提下，明確每個 function 的**性質**與**修改風險**。三類定義：

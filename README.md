@@ -131,6 +131,12 @@ No Python? Grab the prebuilt **Windows onefile exe** from the
 [Releases](../../releases) page (built automatically from each `v*` tag — tests run
 first, PNG export included).
 
+> **SmartScreen / antivirus note**: the exe is currently unsigned, so Windows may show
+> a "protected your PC" prompt (More info → Run anyway). Each release ships a
+> `SHA256SUMS.txt` to verify integrity, plus an **onedir zip** variant that trips far
+> fewer antivirus heuristics than the self-extracting onefile. Code signing hooks are
+> already built into the release pipeline (see docs/DEVELOPMENT.md §6.1).
+
 The window opens with a small demo waveform so you can start experimenting
 immediately — and a short interactive tutorial on first launch.
 

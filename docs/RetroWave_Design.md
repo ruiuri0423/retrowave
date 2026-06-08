@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.35** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.36** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1184,6 +1184,11 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.36** — **MCP run-layer (`run_mcp.py`).** A launcher counterpart to `run.py` (GUI):
+  it puts `src/` on the path and starts the stdio MCP server, so an MCP client can point at the
+  file directly without `PYTHONPATH` wiring. A missing `mcp` package becomes a friendly stderr
+  message (exit 1) instead of a traceback; unrelated import errors still propagate. README's
+  `.mcp.json` snippet now targets `run_mcp.py`. Guarded by `tests/test_run_mcp.py` (3 tests).
 - **v1.35** — **AI/MCP interface MVP (§15).** New `mcp_server.py`: a `WaveSession` holding one
   `Document`, exposing the §14.3 command catalog as command-injection tools (`add_signal`, `fill`,
   `create_group`, `add_anchor`, …) plus `render` / `get_document` / `open_document` /

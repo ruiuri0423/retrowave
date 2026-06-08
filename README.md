@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.35**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.36**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -214,17 +214,19 @@ existing saved files.
 
 ```bash
 pip install mcp pillow          # mcp = server runtime; pillow = PNG rendering
+python run_mcp.py               # starts the stdio MCP server (Ctrl+C to stop)
 ```
 
-Register it with any MCP client (example `.mcp.json`):
+`run_mcp.py` is the run-layer for MCP (the counterpart of `run.py`, which starts the
+GUI) — it puts `src/` on the path itself, so an MCP client can point straight at it.
+Register it with any MCP client (example `.mcp.json`, use the absolute path):
 
 ```json
 {
   "mcpServers": {
     "retrowave": {
       "command": "python",
-      "args": ["-m", "retrowave.mcp_server"],
-      "env": { "PYTHONPATH": "src" }
+      "args": ["/absolute/path/to/run_mcp.py"]
     }
   }
 }

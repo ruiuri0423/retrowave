@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.34**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.35**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -203,6 +203,36 @@ never duplicated.
 
 ---
 
+## AI / MCP plugin (experimental)
+
+RetroWave ships an [MCP](https://modelcontextprotocol.io/) server so an LLM in your
+AI session (Claude Desktop, Claude Code, …) can **drive RetroWave by command
+injection** — it builds a diagram step by step (`add_signal`, `fill`, `create_group`,
+`add_anchor`, …), then `render`s an image. The model authors *only* through commands;
+it never hand-writes the document JSON. `open_document` / `import_wavedrom` only load
+existing saved files.
+
+```bash
+pip install mcp pillow          # mcp = server runtime; pillow = PNG rendering
+```
+
+Register it with any MCP client (example `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "retrowave": {
+      "command": "python",
+      "args": ["-m", "retrowave.mcp_server"],
+      "env": { "PYTHONPATH": "src" }
+    }
+  }
+}
+```
+
+The command logic is covered by `tests/test_mcp_session.py`; the stdio wiring needs
+`mcp` installed and is best verified by plugging it into a client.
+
 ## Interoperability
 
 - **WaveDrom JSON, both directions** (*File → Import / Export WaveDrom JSON*). Export
@@ -215,9 +245,8 @@ never duplicated.
 
 ## Roadmap
 
-- **AI / MCP interface.** An MCP server so an LLM in your AI session can drive
-  RetroWave by direct command injection (build a diagram step by step, then render) —
-  WaveDrom import (this release) is the groundwork.
+- **AI / MCP interface** (MVP shipped — see above). Next: remote transport
+  (SSE/HTTP) and an optional interactive confirm/edit mode.
 - **VCD import.** Render deterministic simulation output (the source of truth in a
   Verilog flow) into clean, publication-ready diagrams.
 - **Quality-of-life:** negative offsets (phase-left), incremental redraw for very

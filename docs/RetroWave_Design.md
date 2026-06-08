@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.34** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.35** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1138,7 +1138,7 @@ Transient shell state is never part of a snapshot.
 
 ## 15. AI / MCP interface layer (planned)
 
-> **Status: design adopted; v1.34 groundwork done (WaveDrom import). MCP server is v1.35.**
+> **Status: implemented (v1.35, MVP). WaveDrom import groundwork in v1.34.**
 > This is a *fourth* consumer of the transfer layer (§14), a sibling to the tkinter shell and
 > the export pipeline — it adds no new core logic. Language-agnostic by intent.
 
@@ -1150,23 +1150,33 @@ render an image.
 - **Host-model-driven only.** The model lives in the *user's* AI session; RetroWave is the "hands".
   No model entry / no LLM is built into the app (a self-contained `spec_to_waveform` agent was
   considered and **rejected** — keeps the app dependency-free and avoids an unvalidated path).
-- **Stateful command injection is the primary interface.** The server holds one `Document` session
-  and exposes the §14.3 command catalog as tools (`add_signal`, `set_cells`, `create_group`,
-  `add_anchor`, …) plus `render` / `get_document` / `undo`. The LLM *learns to operate RetroWave*.
-  `load_document(json)` (bulk native JSON) is a secondary convenience for restoring a saved doc.
-- **Native document JSON is the exchange format** the model learns; flat command arguments sidestep
-  the recursive-`group_tree` limitation of strict structured outputs. WaveDrom is a *validated
-  interop format* (v1.34), not the primary LLM language; the MCP `import_wavedrom` tool reuses it.
+- **Command injection is the *only* authoring path.** The server holds one `Document` session and
+  exposes the §14.3 command catalog as tools (`add_signal`, `fill`, `create_group`, `add_anchor`,
+  …) plus `render` / `get_document` / `undo`. The LLM **builds and edits waveforms exclusively
+  through commands**, like a user clicking — it never hand-writes or edits the document JSON.
+- **The native document JSON is a persistence format, not an LLM authoring surface.** There is no
+  tool that takes an AI-authored document blob. `open_document(path)` / `import_wavedrom(path)`
+  only *load an existing saved file* (a RetroWave `.json` or a WaveDrom file) so the session can
+  then continue editing it via commands or render it. Flat command arguments also sidestep the
+  recursive-`group_tree` limitation of strict structured outputs. WaveDrom (v1.34) is a validated
+  interop format for opening existing files, not the primary LLM language.
 - **Headless only for now.** Returns the rendered PNG inline (MCP image block) + the document.
   An interactive mode (pop the GUI to confirm/edit) is **shelved**, to be reconsidered by usage.
 - **Resources** teach the model: `waveform://schema` (document schema + element vocabulary),
   `waveform://commands` (the command reference), `waveform://guide` (few-shot spec→commands→image).
 - **Transport: stdio MVP** (local plugin via `.mcp.json`); SSE/HTTP deferred until after v1.35.
 
-**Phasing:** v1.34 WaveDrom import + bidirectional validation (done) → v1.35 MCP server MVP
-(`mcp_server.py`, stdio, command-injection tools + resources) → later: interactive mode, remote
-transport. The server is a top-level sibling (it may import the app for a future interactive mode),
-so it stays outside the headless boundary; the tkinter boundary test is unaffected.
+**Implementation (v1.35).** `mcp_server.py` splits in two: `WaveSession` (holds one `Document`,
+exposes the command catalog + `render`/`get_document`/`open_document`/`import_wavedrom`/`undo` as
+plain methods returning JSON-able dicts — fully headless, no `mcp` package needed, unit-tested in
+`tests/test_mcp_session.py`), and a thin `serve()`/`main()` that lazily imports FastMCP, registers
+each `WaveSession` method as a stdio tool, and exposes the three resources. The lazy import keeps
+the module headless-importable (it's in the `CORE_MODULES` boundary test) — `mcp` is only needed to
+actually run the server (`python -m retrowave.mcp_server`). `render` returns the PNG as base64 (for
+an inline image block) or SVG markup; `get_document` returns a WaveDrom-style compact view plus an
+index→name map so the model knows which indices its commands address. **Phasing:** v1.34 WaveDrom
+import (done) → v1.35 MCP MVP (done) → later: remote transport (SSE/HTTP), interactive confirm/edit
+mode (both deferred by usage).
 
 ## 16. Changelog
 
@@ -1174,6 +1184,16 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.35** — **AI/MCP interface MVP (§15).** New `mcp_server.py`: a `WaveSession` holding one
+  `Document`, exposing the §14.3 command catalog as command-injection tools (`add_signal`, `fill`,
+  `create_group`, `add_anchor`, …) plus `render` / `get_document` / `open_document` /
+  `import_wavedrom` / `undo` — the LLM **builds waveforms only through commands**, never by writing
+  document JSON; `open_document`/`import_wavedrom` only load existing saved files. The substance is
+  headless and unit-tested without the `mcp` package (`tests/test_mcp_session.py`, 12 tests); a thin
+  `serve()`/`main()` lazily imports FastMCP for the stdio transport (`python -m retrowave.mcp_server`,
+  needs `pip install mcp`). Three resources (`waveform://schema|commands|guide`) teach the model the
+  vocabulary. Added to the headless boundary test. Remote transport and an interactive confirm/edit
+  mode are deferred.
 - **v1.34** — **WaveDrom import (interchange now bidirectional).** `import_wavedrom` /
   `wavedrom_to_dict` / `read_wavedrom` parse WaveDrom JSON back into a validated document — the
   exact inverse of the existing export (§9.4) — wired into the UI as *File → Import WaveDrom JSON*

@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.31**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.32**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -52,105 +52,90 @@ immediately — and a short interactive tutorial on first launch.
 
 ## Features
 
-**Signal drawing**
-- Six waveform element types: `CLK` (clock), `H` (logic high), `L` (logic low),
-  `BUS` (data bus with an editable label), `HiZ` (high-impedance / mid level),
-  and `Unknown` (red hatched "don't care").
-- Neighbor-aware transitions: rising/falling edges, bus open/close triangles, and
-  `X` data crossings are computed from adjacent cells with a single unified slope,
-  so `BUS↔HiZ`, `H↔L`, and data crossings all share consistent geometry.
-- Click to paint a single cell, drag to brush a row (the starting row is locked so
-  vertical drift does not affect other rows).
-- BUS cells preserve existing data when brushed over; click an existing BUS cell
-  again to edit its value.
+Each item says what you get and how to do it. A short interactive tutorial also
+runs on first launch (reopen via *Help → Interactive tutorial*).
 
-**Onboarding tutorial**
-- First launch opens a step-by-step interactive tour: the window dims, each step
-  **spotlights** the region it explains (on Windows the highlighted area is fully
-  clear *and clickable*, so you can try the gesture immediately). Skip ends it
-  permanently; the last step has a "don't show again" checkbox. Reopen anytime via
-  *Help → Interactive tutorial*.
+**Draw waveforms**
+- Six element types: `CLK` (clock), `H` (high), `L` (low), `BUS` (data bus with an
+  editable label), `HiZ` (high-impedance), and `Unknown` (red hatched "don't care").
+- Pick an element from the toolbar or with number keys `1`–`6`, then **click a cell**
+  to paint it or **drag along a row** to brush (the row you start on is locked, so
+  your hand can drift without touching other rows).
+- For a `BUS`, click the cell again to type/edit its value; brushing over existing
+  BUS cells keeps their values. Edges and transitions are joined automatically for a
+  clean, consistent look.
 
-**Bilingual UI**
-- English and Traditional Chinese (繁體中文): *Help → Language*, applied on restart.
-  Translations live in plain string catalogs (`src/retrowave/locales/`), so adding a
-  language is just one more dict module.
+**Select & fill**
+- Hold **Shift or Ctrl and drag** on the canvas to box-select a rectangle, then press
+  an element key to fill the whole block, or `Ctrl+C` to copy it.
+- **Pan mode** (`Esc`): deselects the tool so a plain left-drag pans the canvas
+  instead of painting. Box-select still works with Shift/Ctrl+drag; press `1`–`6` or
+  click an element button to return to drawing.
 
-**Undo / Redo**
+**Per-signal tweaks**
+- Click a name to select; **Ctrl/Shift+click** for multi-select. Right-click a signal
+  for: color, clear color, set **offset** (phase shift), create/merge/leave group,
+  rename, delete — actions apply to all selected signals.
+- Double-click a name to rename it.
+
+**Groups** (nest as deep as you like)
+- Select signals → right-click → **Create new group**. Merge signals into an existing
+  group, or drop one group onto another to **nest** it as a subgroup.
+- **Click a group header** to collapse/expand it. Right-click a header for: color,
+  group-wide offset, rename, copy/paste, **dissolve** (promote members up a level), or
+  **delete** (with all members). A group's color tints the signals under it.
+
+**Reorder by dragging names**
+- Drag a name up/down to move it: drop inside a group (or on a header's lower half) to
+  **merge** it in at the cursor; drop on a header's upper half to place it just before
+  the group; drop among top-level signals to move it **out**.
+- **Multi-select drag**: select several signals, then drag any one of them to move the
+  whole selection as one block (keeping its order) — reorder / merge / move out in a
+  single gesture.
+- While dragging, the view dims, the target lights up, and an insertion line shows
+  exactly where it will land.
+
+**Annotations**
+- Right-click a waveform → **Create anchor here** (snaps to the nearest cell edge).
+- **Drag from one anchor to another** to draw a timing/relationship line, then type a
+  label (e.g. `t_su`); right-click a line to change its label or arrow style. Hover an
+  anchor or line and press `Del` to remove it.
+
+**Undo / redo**
 - `Ctrl+Z` / `Ctrl+Y`, last **5 steps**. One gesture = one step: a whole brush stroke,
-  block fill, or paste reverts atomically; no-op gestures aren't recorded. Destructive
-  operations (delete signals/group, New, Open) are undoable too.
-
-**Editing & selection**
-- **Pan mode** (`Esc`): deselects the tool so plain left-drag pans the canvas —
-  no more accidental painting while navigating. Panning is clamped to the drawing
-  area (no vertical drift when everything already fits the window) and the name
-  column always stays in sync. Shift/Ctrl + left-drag still
-  box-selects; click an element button or press 1–6 to return to drawing.
-  `Esc` works from any state (also clears an active box selection); there is
-  deliberately no toolbar button for it.
-- Box-select a rectangular region (Shift **or** Ctrl + drag — both are pure
-  selection); then press an element key to fill, or `Ctrl+C` to copy.
-- Per-signal **color (highlight)** and **offset / phase shift**, applied to one or
-  many selected signals at once.
-- Multi-select signals in the name column (Ctrl / Shift click); per-signal actions
-  live in a right-click menu (color, offset, rename, delete, grouping).
-
-**Groups** (arbitrary nesting depth)
-- Create a new group from selected signals; **merge** signals into a group, or
-  **nest** one group inside another (a group merged into another becomes a
-  subgroup), to any depth.
-- **Dissolve** a group (promote its children up one level, keeping any subgroups) or
-  **delete** a group together with its whole subtree; apply a single **group-wide
-  offset** to all members (including nested) at once.
-- Collapse / expand a group from its header row (collapsed groups hide their whole
-  subtree); headers and members indent by nesting depth.
-- Group color cascades to descendant waveforms (nearest ancestor group wins; a
-  per-signal color still overrides it).
-- Structure lives in a separate **group tree** (metadata + nesting); signals stay a
-  flat pool referenced by stable id, kept in sync with the tree's leaf order — so
-  index-based editing, anchors, and hit-testing all keep working.
-
-**Reordering & drag merge/split**
-- Drag a signal name to move it: drop onto a group header's lower half or inside a
-  group to **merge** it in at the exact cursor position (merge + reorder in one
-  move); drop on a header's upper half to place it just before that group; drop
-  among top-level signals to move it **out** to the top level.
-- **Multi-select drag**: select several signals (Ctrl/Shift+click), then drag any one
-  of them to move the whole selection as a contiguous block (it keeps its top-to-bottom
-  order) — reorder, merge into a group, or move out, all in one gesture and one undo step.
-- Drag a group header to move the whole group; dropping it onto another group
-  **nests** it as a subgroup (it can't be dropped into its own descendant).
-- Drag starts only after moving past half a row height. While dragging, the view
-  dims, the container the item would drop into is highlighted, and an insertion line
-  shows the exact landing spot.
+  block fill, or paste reverts at once. Delete/New/Open are undoable too.
 
 **Copy & paste**
-- Cell-range copy/paste (auto-adds rows when needed).
-- Signal-level copy/paste (full signal incl. name, offset, color, waveform).
-- Group-level copy/paste (whole group is duplicated under a fresh group id).
+- Copy a range of cells, whole signals (name, offset, color, waveform), or an entire
+  group; `Ctrl+V` pastes (adding rows automatically when a cell paste runs past the end).
 
-**Template library**
-- Templates are stored **independently of project files**; an index file under
-  `~/.retrowave/templates_index.json` records the name and path of each template
-  JSON.
-- Imported templates are auto-loaded on startup. If a referenced file is missing,
-  the app reports it and prunes the index.
-- Importing a JSON registers it as a template (it does *not* draw to the canvas,
-  unlike **Open**). Inserting a template from the **Template** menu adds its
-  signals to the canvas and promotes them into a group named after the template.
+**Templates** (the **Template** menu)
+- *File → Import Template…* registers a JSON file as a reusable template (auto-loaded on
+  startup). Pick it from the **Template** menu to drop it onto the canvas as a group, or
+  *Save current canvas as template…* to make your own.
 
-**Save / export**
-- Project save & load as JSON (includes view geometry, colors, and groups).
-- **PNG export with no Ghostscript dependency** — rendering is done directly with
-  Pillow, reusing the exact same drawing code as the on-screen canvas. A resolution
-  multiplier (1×–4×) re-renders at higher pixel density for crisp output (not an
-  upscale). Only `pip install pillow` is needed.
-- **SVG export (vector)** — a dedicated SVG backend reuses the same drawing engine,
-  producing infinitely scalable, editable output (and the dashed period grid is
-  preserved). No third-party dependency.
-- EPS / PostScript export uses tkinter's built-in PostScript writer (zero
-  dependencies).
+**Save & export** (the **File** menu)
+- Save/open projects as JSON (geometry, colors, and groups included).
+- Export to **PNG** (needs Pillow; pick a 1×–4× resolution for crisp, true re-rendered
+  output), **SVG** (vector, infinitely scalable, dashed grid preserved), or **EPS/PS**.
+  You can also export **WaveDrom JSON** for interchange.
+
+**Bilingual UI**
+- English and Traditional Chinese (繁體中文): switch via *Help → Language* (applied on
+  restart).
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+E` | New / Open / Save / Export |
+| `1`–`6` | Select element (CLK / H / L / BUS / HiZ / Unknown) |
+| Shift or Ctrl + drag | Box-select on canvas (draw or pan mode) |
+| `Ctrl+C` / `Ctrl+V` | Copy / paste (cells, signals, or group — by last selection) |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo (last 5 steps; one gesture = one step) |
+| `Esc` | Pan mode: clear selection + deselect tool; left-drag then pans the canvas |
+| Right-click a cell | Clear to Low |
+| Double-click a name | Rename |
 
 ---
 
@@ -184,65 +169,6 @@ python -m pytest tests/test_model.py -k group   # run a subset
   wave strings, PNG pixel dimensions (skipped without Pillow).
 
 Both `python -m pytest` and `python -m compileall -q src` must pass before a commit.
-
----
-
-## Usage
-
-**Draw**
-1. Pick an element with the toolbar buttons or number keys `1`–`6`
-   (CLK / H / L / BUS / HiZ / Unknown).
-2. Click a cell to draw it, or drag along a row to brush.
-3. For a BUS, click the cell again to type/edit its data label.
-
-**Pan / navigate**
-- Press `Esc` to enter **pan mode** (no element selected): left-drag pans the
-  canvas, and clicks never paint. The cursor changes to a move shape.
-- Shift/Ctrl + left-drag still box-selects while panning.
-- Anchors stay fully usable in pan mode: create them from the right-click menu and
-  **drag anchor→anchor to draw relationship lines** (anchors take priority over panning).
-- Click an element button or press `1`–`6` to go back to drawing.
-
-**Select & fill a region**
-- Hold **Shift or Ctrl** and drag on the canvas to box-select (works in both
-  draw and pan mode).
-- With a region selected, press an element key to fill it, or `Ctrl+C` to copy.
-
-**Per-signal tweaks (name column)**
-- Click a name to select; `Ctrl`/`Shift`+click to multi-select.
-- **Right-click** a signal for: color, clear color, set offset, create new group,
-  merge into a group, remove from group, rename, delete. Actions apply to all
-  selected signals.
-
-**Groups**
-- Select signals, right-click → *Create new group*.
-- **Click a group header** to collapse / expand.
-- Right-click a group header for: collapse/expand, group color, rename, merge into
-  another group, copy/paste group, dissolve group.
-
-**Templates** (`Template` menu, next to *File* / *Help*)
-- *File → Import Template…* registers a JSON file as a reusable template.
-- The **Template** menu lists imported templates; click a name to insert it into
-  the canvas as a group.
-- *Save current canvas as template…* writes the current diagram out and registers
-  it.
-
-**Save / export** (`File` menu)
-- *Save* / *Open* for project JSON.
-- *Export* to PNG (needs Pillow; choose a 1×–4× resolution), SVG (vector), or EPS / PS.
-
-### Keyboard shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+N` / `Ctrl+O` / `Ctrl+S` / `Ctrl+E` | New / Open / Save / Export |
-| `1`–`6` | Select element (CLK / H / L / BUS / HiZ / Unknown) |
-| Shift or Ctrl + drag | Box-select on canvas (draw or pan mode) |
-| `Ctrl+C` / `Ctrl+V` | Copy / paste (cells, signals, or group — by last selection) |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / redo (last 5 steps; one gesture = one step) |
-| `Esc` | Pan mode: clear selection + deselect tool; left-drag then pans the canvas |
-| Right-click on a cell | Clear to Low |
-| Double-click a name | Rename |
 
 ---
 

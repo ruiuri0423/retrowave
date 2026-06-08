@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.31** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.32** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -1129,6 +1129,14 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.32** — **Help heading consistency + README rework.** (1) The Chinese Usage catalog used
+  full-width 【】 section brackets, so its headings rendered as literal text while English used
+  the styled `[Section]` form (blue bold, brackets stripped). The catalog now uses ASCII `[ ]`,
+  so both languages get identical styled headings. (2) README: the standalone *Usage* section
+  was folded into *Features* (each item now states the capability and how to do it, with keys/
+  gestures inline), implementation jargon was removed from the feature copy (group-tree/flat-
+  pool/sid internals, layering terms — those live in the design spec for contributors), and the
+  shortcuts table moved under Features. No code-behavior change beyond the catalog string.
 - **v1.31** — **Multi-select drag, keycap-style shortcuts table, README banner.**
   (1) Dragging a name now moves the *whole* multi-selection as one contiguous block
   (preserving DFS leaf order) when the grabbed row is part of it — a new

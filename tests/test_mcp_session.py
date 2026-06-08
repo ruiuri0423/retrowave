@@ -43,6 +43,14 @@ def test_fill_is_single_undo_step(s):
     assert_invariants(s.model)
 
 
+def test_set_periods(s):
+    """Regression: set_periods must call Document.set_n_periods (name bug)."""
+    r = s.set_periods(8)
+    assert r["ok"] and r["n_periods"] == 8 and s.model.n_periods == 8
+    assert all(len(sig["cells"]) == 8 for sig in s.model.signals)
+    assert_invariants(s.model)
+
+
 def test_set_cell_validation(s):
     assert s.set_cell(0, 0, "BogusType")["ok"] is False
     assert s.set_cell(99, 0, "H")["set"] is False          # out of range -> False (no event)
@@ -126,3 +134,12 @@ def test_fastmcp_server_builds():
     resources = asyncio.run(srv.list_resources())
     assert {t.name for t in tools} == set(_TOOLS)
     assert {str(r.uri) for r in resources} == set(_RESOURCES)
+    # Regression: type annotations must yield integer/array schemas (not string),
+    # otherwise int comparisons inside Document fail at call time.
+    by = {t.name: t.inputSchema["properties"] for t in tools}
+    assert by["set_cell"]["signal"]["type"] == "integer"
+    assert by["set_cell"]["period"]["type"] == "integer"
+    assert by["remove_signals"]["indices"]["type"] == "array"
+    assert by["create_group"]["indices"]["type"] == "array"
+    assert by["set_offset"]["value"]["type"] == "number"
+    assert by["get_document"]["full"]["type"] == "boolean"

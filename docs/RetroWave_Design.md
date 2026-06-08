@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.37** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.38** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1184,6 +1184,15 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.38** — **Fix MCP tool parameter typing + a method-name bug.** `WaveSession` methods had no
+  type annotations, so FastMCP inferred every parameter as `string`; integer/array arguments
+  (`signal`, `period`, `indices`, …) arrived as strings and blew up on the first int comparison
+  inside `Document` (`'<=' not supported between instances of 'int' and 'str'`). Added `int` /
+  `List[int]` / `float` / `bool` / `Optional[str]` annotations so the generated schemas are correct,
+  and fixed `set_periods` calling a non-existent `Document.set_periods` (→ `set_n_periods`). Both
+  surfaced while driving the tools for real (an AHB timing diagram). Guards: `test_set_periods`
+  and schema-type assertions in `test_fastmcp_server_builds`. Note: a running server must be
+  restarted to pick up the new schemas (FastMCP builds them at startup).
 - **v1.37** — **Fix FastMCP stdio wiring.** The resource registration passed a `lambda t=text: t`;
   FastMCP counts the bound default as a function parameter and requires it to match a `{...}` URI
   placeholder, so static resource URIs raised `ValueError: Mismatch between URI parameters set()

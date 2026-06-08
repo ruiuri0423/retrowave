@@ -20,6 +20,7 @@ import base64
 import json
 import os
 import tempfile
+from typing import List, Optional
 
 from . import __version__
 from .document import Document
@@ -54,7 +55,7 @@ class WaveSession:
         return self.doc.model
 
     # ---- read / lifecycle ----
-    def get_document(self, full=False):
+    def get_document(self, full: bool = False):
         """Current state. `compact` is a WaveDrom-style readable view; `signals`
         maps each command index to a name/group; `full=True` adds the raw doc."""
         m = self.model
@@ -77,7 +78,7 @@ class WaveSession:
         self.doc.new_document()
         return self.get_document()
 
-    def open_document(self, path):
+    def open_document(self, path: str):
         """Load an EXISTING saved RetroWave .json file (not AI-authored JSON)."""
         try:
             with open(path, encoding="utf-8") as f:
@@ -86,7 +87,7 @@ class WaveSession:
             return _err(f"open failed: {ex}")
         return self.get_document()
 
-    def import_wavedrom(self, path):
+    def import_wavedrom(self, path: str):
         """Load an EXISTING WaveDrom JSON file."""
         try:
             with open(path, encoding="utf-8") as f:
@@ -102,7 +103,7 @@ class WaveSession:
         return _ok(redone=self.doc.redo(), **{"history": self.doc.history()})
 
     # ---- render ----
-    def render(self, format="png", scale=2, path=None):
+    def render(self, format: str = "png", scale: int = 2, path: Optional[str] = None):
         """Render the current diagram. PNG returns base64 (for an inline image
         block) + a saved path; SVG returns the markup. PNG needs Pillow."""
         fmt = format.lower()
@@ -124,35 +125,35 @@ class WaveSession:
             return _err(f"render failed: {ex}")
 
     # ---- signals ----
-    def add_signal(self, name=None, fill="L"):
+    def add_signal(self, name: Optional[str] = None, fill: str = "L"):
         if fill not in WAVE_TYPES:
             return _err(f"fill must be one of {WAVE_TYPES}")
         idx = self.doc.add_signal(name, fill)
         return _ok(index=idx, name=self.model.signals[idx]["name"])
 
-    def remove_signals(self, indices):
+    def remove_signals(self, indices: List[int]):
         return _ok(removed=self.doc.remove_signals(list(indices)))
 
-    def rename_signal(self, index, name):
+    def rename_signal(self, index: int, name: str):
         return _ok(renamed=self.doc.rename_signal(index, name))
 
-    def set_offset(self, indices, value):
+    def set_offset(self, indices: List[int], value: float):
         return _ok(count=self.doc.set_offset(list(indices), float(value)))
 
-    def set_color(self, indices, color):
+    def set_color(self, indices: List[int], color: Optional[str] = None):
         """color = hex like '#2266CC', or null to clear."""
         return _ok(count=self.doc.set_color(list(indices), color))
 
-    def set_periods(self, n):
-        return _ok(changed=self.doc.set_periods(int(n)), n_periods=self.model.n_periods)
+    def set_periods(self, n: int):
+        return _ok(changed=self.doc.set_n_periods(int(n)), n_periods=self.model.n_periods)
 
     # ---- cells (drawing) ----
-    def set_cell(self, signal, period, type, text=""):
+    def set_cell(self, signal: int, period: int, type: str, text: str = ""):
         if type not in WAVE_TYPES:
             return _err(f"type must be one of {WAVE_TYPES}")
         return _ok(set=self.doc.set_cell(signal, period, type, text))
 
-    def fill(self, signal, start, end, type, text=""):
+    def fill(self, signal: int, start: int, end: int, type: str, text: str = ""):
         """Fill periods [start, end] (inclusive) of one signal with `type` — one
         undo step. The 'brush' equivalent."""
         if type not in WAVE_TYPES:
@@ -169,32 +170,32 @@ class WaveSession:
         return _ok(filled=n)
 
     # ---- groups ----
-    def create_group(self, indices, name=None):
+    def create_group(self, indices: List[int], name: Optional[str] = None):
         gid = self.doc.group_signals(list(indices), name)
         return _ok(gid=gid) if gid else _err("could not create group (empty selection?)")
 
-    def merge_into_group(self, indices, gid):
+    def merge_into_group(self, indices: List[int], gid: str):
         return (_ok(gid=gid) if self.doc.merge_into_group(list(indices), gid)
                 else _err("merge failed (bad gid?)"))
 
-    def dissolve_group(self, gid):
+    def dissolve_group(self, gid: str):
         return _ok(dissolved=self.doc.ungroup([gid]))
 
-    def delete_group(self, gid):
+    def delete_group(self, gid: str):
         return _ok(deleted_signals=self.doc.delete_group(gid))
 
-    def toggle_collapse(self, gid):
+    def toggle_collapse(self, gid: str):
         r = self.doc.toggle_group(gid)
         return _ok(collapsed=r) if r is not None else _err("bad gid")
 
-    def set_group_color(self, gid, color):
+    def set_group_color(self, gid: str, color: Optional[str] = None):
         return _ok(set=self.doc.set_group_color(gid, color))
 
-    def rename_group(self, gid, name):
+    def rename_group(self, gid: str, name: str):
         return _ok(set=self.doc.rename_group(gid, name))
 
     # ---- annotations ----
-    def add_anchor(self, signal, period, edge="start"):
+    def add_anchor(self, signal: int, period: int, edge: str = "start"):
         if edge not in ("start", "mid", "end"):
             return _err("edge must be start|mid|end")
         if not (0 <= signal < len(self.model.signals)):
@@ -202,7 +203,7 @@ class WaveSession:
         nid = self.doc.add_anchor(self.model.signals[signal]["sid"], int(period), edge)
         return _ok(nid=nid) if nid else _err("could not add anchor")
 
-    def add_edge(self, frm, to, label="", style="double"):
+    def add_edge(self, frm: str, to: str, label: str = "", style: str = "double"):
         if style not in ("double", "single", "measure"):
             return _err("style must be double|single|measure")
         e = self.doc.add_edge(frm, to, label, style)
@@ -214,7 +215,7 @@ class WaveSession:
         avail, _missing = lib.load()
         return _ok(templates=[e["name"] for e in avail])
 
-    def insert_template(self, name):
+    def insert_template(self, name: str):
         lib = TemplateLibrary()
         avail, _ = lib.load()
         entry = next((e for e in avail if e["name"] == name), None)

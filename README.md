@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.36**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.37**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).

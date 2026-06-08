@@ -268,22 +268,34 @@ _TOOLS = [
 ]
 
 
-def serve():
-    """Run the stdio MCP server. Requires `pip install mcp`."""
+def build_server(session=None):
+    """Construct and return the FastMCP server (registers all tools + resources)
+    without running it — separated from serve() so the wiring is smoke-testable.
+    Requires `pip install mcp`."""
     from mcp.server.fastmcp import FastMCP
 
     server = FastMCP("retrowave")
-    session = WaveSession()
+    session = session or WaveSession()
 
     for name in _TOOLS:
         method = getattr(session, name)
         # FastMCP infers the input schema from the bound method's signature.
         server.add_tool(method, name=name, description=(method.__doc__ or name).strip())
 
-    for uri, text in _RESOURCES.items():
-        server.resource(uri)(lambda t=text: t)      # FastMCP resource decorator
+    def _const(value):                               # zero-arg reader (FastMCP checks
+        def _read():                                 # that params match URI placeholders;
+            return value                             # a static URI needs a no-arg function)
+        return _read
 
-    server.run()                                     # stdio transport by default
+    for uri, text in _RESOURCES.items():
+        server.resource(uri)(_const(text))           # FastMCP resource decorator
+
+    return server
+
+
+def serve():
+    """Run the stdio MCP server. Requires `pip install mcp`."""
+    build_server().run()                             # stdio transport by default
 
 
 def main():

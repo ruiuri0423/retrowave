@@ -112,3 +112,17 @@ def test_tool_list_matches_methods():
     from retrowave import mcp_server
     for name in mcp_server._TOOLS:
         assert callable(getattr(WaveSession, name, None)), f"missing tool method: {name}"
+
+
+def test_fastmcp_server_builds():
+    """The stdio wiring registers every tool + resource without error (requires
+    the `mcp` package; skipped otherwise). Regression guard for the FastMCP
+    resource-decorator signature bug fixed in v1.37."""
+    pytest.importorskip("mcp")
+    import asyncio
+    from retrowave.mcp_server import build_server, _TOOLS, _RESOURCES
+    srv = build_server()
+    tools = asyncio.run(srv.list_tools())
+    resources = asyncio.run(srv.list_resources())
+    assert {t.name for t in tools} == set(_TOOLS)
+    assert {str(r.uri) for r in resources} == set(_RESOURCES)

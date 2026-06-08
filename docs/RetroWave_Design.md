@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.36** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.37** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1184,6 +1184,14 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.37** — **Fix FastMCP stdio wiring.** The resource registration passed a `lambda t=text: t`;
+  FastMCP counts the bound default as a function parameter and requires it to match a `{...}` URI
+  placeholder, so static resource URIs raised `ValueError: Mismatch between URI parameters set()
+  and function parameters {'t'}` at startup. Fixed with a zero-arg closure factory. `serve()` was
+  split into `build_server()` (constructs + registers, smoke-testable) and `serve()` (builds then
+  `run()`); a guarded test (`test_fastmcp_server_builds`, skipped without `mcp`) now asserts all 26
+  tools + 3 resources register cleanly. Verified: `build_server()` lists 26 tools and the three
+  `waveform://` resources.
 - **v1.36** — **MCP run-layer (`run_mcp.py`).** A launcher counterpart to `run.py` (GUI):
   it puts `src/` on the path and starts the stdio MCP server, so an MCP client can point at the
   file directly without `PYTHONPATH` wiring. A missing `mcp` package becomes a friendly stderr

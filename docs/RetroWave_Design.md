@@ -1,8 +1,8 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.33** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.34** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
-[Changelog](#15-changelog) at the end.
+[Changelog](#16-changelog) at the end.
 
 > A complete, implementation-ready design document for the **RetroWave** digital-waveform
 > editor. It is written so that an engineer (or model) who has never seen the original code can
@@ -857,6 +857,19 @@ document.edge   = for each edge: "<frm><op><to> <label>"
                   op: double->"<->", single->"->", measure->"-"
 ```
 
+**Import (the exact inverse).** WaveDrom JSON also imports back into a document
+(`import_wavedrom` / `wavedrom_to_dict`, available in the UI as *File → Import WaveDrom JSON*).
+The reverse-char map is `p->CLK 1->H 0->L z->HiZ x->Unknown =->BUS`; a `.` repeats the previous
+cell (for BUS, the previous value); each `=` consumes the next `data[]` entry; `phase` negates back
+to `offset`; nested arrays rebuild the group tree (names only — fresh gids are minted); `node`
+strings rebuild anchors and `edge` strings rebuild relationship lines. Rows of unequal length pad
+to the longest with `L`. The result is validated through `Model.load_dict` (enforces §2.6).
+**Not recovered on a round-trip** (by construction): per-signal/group colors, the unified-slope
+styling, original group ids, and anchor edge-position (the `node` string carries only the period,
+so anchors re-import as `start`). A `Model -> export -> import -> Model` round-trip is otherwise
+equality-preserving on names, cells, periods, grouping, phase, anchors-by-period, and edges —
+covered by `tests/test_export.py`.
+
 ---
 
 ## 10. Persistence & migration
@@ -1123,12 +1136,51 @@ Transient shell state is never part of a snapshot.
 - **Second shell** — the §12 web/SVG reimplementation consumes the same catalog unchanged.
 - **VCD import & scripting** — an importer is just another command producer.
 
-## 15. Changelog
+## 15. AI / MCP interface layer (planned)
+
+> **Status: design adopted; v1.34 groundwork done (WaveDrom import). MCP server is v1.35.**
+> This is a *fourth* consumer of the transfer layer (§14), a sibling to the tkinter shell and
+> the export pipeline — it adds no new core logic. Language-agnostic by intent.
+
+**Goal.** Turn manual operation into **direct command injection from an LLM**: an MCP server lets a
+model in any AI session (Claude Desktop, Claude Code, …) drive RetroWave the way a user would, then
+render an image.
+
+**Decisions (locked):**
+- **Host-model-driven only.** The model lives in the *user's* AI session; RetroWave is the "hands".
+  No model entry / no LLM is built into the app (a self-contained `spec_to_waveform` agent was
+  considered and **rejected** — keeps the app dependency-free and avoids an unvalidated path).
+- **Stateful command injection is the primary interface.** The server holds one `Document` session
+  and exposes the §14.3 command catalog as tools (`add_signal`, `set_cells`, `create_group`,
+  `add_anchor`, …) plus `render` / `get_document` / `undo`. The LLM *learns to operate RetroWave*.
+  `load_document(json)` (bulk native JSON) is a secondary convenience for restoring a saved doc.
+- **Native document JSON is the exchange format** the model learns; flat command arguments sidestep
+  the recursive-`group_tree` limitation of strict structured outputs. WaveDrom is a *validated
+  interop format* (v1.34), not the primary LLM language; the MCP `import_wavedrom` tool reuses it.
+- **Headless only for now.** Returns the rendered PNG inline (MCP image block) + the document.
+  An interactive mode (pop the GUI to confirm/edit) is **shelved**, to be reconsidered by usage.
+- **Resources** teach the model: `waveform://schema` (document schema + element vocabulary),
+  `waveform://commands` (the command reference), `waveform://guide` (few-shot spec→commands→image).
+- **Transport: stdio MVP** (local plugin via `.mcp.json`); SSE/HTTP deferred until after v1.35.
+
+**Phasing:** v1.34 WaveDrom import + bidirectional validation (done) → v1.35 MCP server MVP
+(`mcp_server.py`, stdio, command-injection tools + resources) → later: interactive mode, remote
+transport. The server is a top-level sibling (it may import the app for a future interactive mode),
+so it stays outside the headless boundary; the tkinter boundary test is unaffected.
+
+## 16. Changelog
 
 Versioned to match the `retrowave.py` implementation. Newest first. When adding a feature or
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.34** — **WaveDrom import (interchange now bidirectional).** `import_wavedrom` /
+  `wavedrom_to_dict` / `read_wavedrom` parse WaveDrom JSON back into a validated document — the
+  exact inverse of the existing export (§9.4) — wired into the UI as *File → Import WaveDrom JSON*
+  (one undoable command). Round-trip equality is covered on the documented preserved subset
+  (`tests/test_export.py`: import basics, groups/phase/nodes/edges, Model→export→import, import
+  idempotence, unequal-wave padding). This is the headless groundwork for the planned AI/MCP
+  interface layer (§15): the MCP `import_wavedrom` tool will reuse this directly.
 - **v1.33** — **Startup-time work (packaging, not the app core).** Measured cold start from
   source is ~0.3 s to first frame; the slowness reported on some machines is the PyInstaller
   **onefile** path — it self-extracts to a temp folder on every launch and unsigned binaries

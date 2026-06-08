@@ -12,7 +12,7 @@ from .backends import PILCanvas, SVGCanvas, _load_pil_fonts
 from .document import Document
 from .engine import Engine
 from .elements import WAVE_TYPES
-from .export import export_png, export_svg, export_wavedrom
+from .export import export_png, export_svg, export_wavedrom, wavedrom_to_dict
 from .geometry import Geometry
 from .i18n import available_languages, get_language, set_language, tr
 from .templates import TemplateLibrary
@@ -139,6 +139,7 @@ class App(tk.Tk):
         fm.add_command(label=tr("Import Template..."), command=self._import_template)
         fm.add_separator()
         fm.add_command(label=tr("Export Image...") + "\tCtrl+E", command=self.do_export)
+        fm.add_command(label=tr("Import WaveDrom JSON..."), command=self.do_import_wavedrom)
         fm.add_command(label=tr("Export WaveDrom JSON..."), command=self.do_export_wavedrom)
         fm.add_separator()
         fm.add_command(label=tr("Exit"), command=self.destroy)
@@ -1386,6 +1387,26 @@ class App(tk.Tk):
 
 
     # ---- WaveDrom export (interchange format; color / uniform-slope visuals are not preserved, nodes/edges carry over) ----
+    def do_import_wavedrom(self):
+        path = filedialog.askopenfilename(
+            title=tr("Import WaveDrom JSON"),
+            filetypes=[("WaveDrom JSON", "*.json"), (tr("All Files"), "*.*")])
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                wd = json.load(f)
+            self.doc.load_document(wavedrom_to_dict(wd))   # one undoable command
+        except Exception as ex:
+            messagebox.showerror(tr("Import Failed"), str(ex)); return
+        self.selected = 0; self.sig_sel = {0} if self.model.signals else set()
+        self._sig_anchor = 0 if self.model.signals else None
+        self.cell_sel = None; self._hover_node = None; self._hover_edge = None
+        self.sp_p.delete(0, tk.END); self.sp_p.insert(0, str(self.model.n_periods))
+        self.request_render()
+        self.status.configure(
+            text=tr(" Imported WaveDrom ({n} signals)").format(n=len(self.model.signals)))
+
     def do_export_wavedrom(self):
         path = filedialog.asksaveasfilename(
             title=tr("Export WaveDrom JSON"), defaultextension=".json",

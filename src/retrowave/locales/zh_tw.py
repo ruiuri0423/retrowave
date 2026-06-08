@@ -25,7 +25,11 @@ TRANSLATIONS = {
     "Save...": "儲存… (Save)",
     "Import Template...": "匯入範本… (Import Template)",
     "Export Image...": "匯出圖片… (Export)",
+    "Import WaveDrom JSON...": "匯入 WaveDrom JSON…",
     "Export WaveDrom JSON...": "匯出 WaveDrom JSON…",
+    "Import WaveDrom JSON": "匯入 WaveDrom JSON",
+    "Import Failed": "匯入失敗",
+    " Imported WaveDrom ({n} signals)": " 已匯入 WaveDrom（{n} 條訊號）",
     "Exit": "離開 (Exit)",
 
     # ---- Help menu (already-wrapped + new) ----

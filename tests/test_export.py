@@ -7,7 +7,9 @@ import pytest
 
 import retrowave
 from retrowave.export import (export_png, export_svg, export_wavedrom,
-                              svg_string, wavedrom_dict)
+                              import_wavedrom, read_wavedrom, svg_string,
+                              wavedrom_dict, wavedrom_to_dict)
+from conftest import assert_invariants
 
 
 @pytest.fixture
@@ -82,6 +84,110 @@ def test_export_wavedrom_writes_json(model, tmp_path):
     export_wavedrom(model, str(p))
     d = json.loads(p.read_text(encoding="utf-8"))
     assert d == wavedrom_dict(model)
+
+
+# ---------------------------------------------------------------- WaveDrom import + round-trip
+def _comparable(m):
+    """Project a Model onto the subset WaveDrom preserves (drops gid/color and
+    anchor edge-position), for round-trip equality checks."""
+    by = {s["sid"]: s["name"] for s in m.signals}
+    sigs = [(s["name"],
+             tuple((c["type"], c.get("text", "")) for c in s["cells"]),
+             round(s.get("offset", 0.0), 3)) for s in m.signals]
+
+    def tree(nodes):
+        out = []
+        for nd in nodes:
+            if nd.get("type") == "group":
+                out.append((m.groups[nd["gid"]]["name"], tree(nd["children"])))
+            else:
+                out.append(by[nd["sid"]])
+        return out
+
+    anchors = sorted((by[nd["sid"]], nd["period"]) for nd in m.nodes.values())
+    edges = sorted((by[m.nodes[e["frm"]]["sid"]], m.nodes[e["frm"]]["period"],
+                    by[m.nodes[e["to"]]["sid"]], m.nodes[e["to"]]["period"],
+                    e["style"], e.get("label", "")) for e in m.edges)
+    return {"sigs": sigs, "tree": tree(m.group_tree),
+            "n": m.n_periods, "anchors": anchors, "edges": edges}
+
+
+def test_import_wavedrom_basic(check):
+    wd = {"signal": [
+        {"name": "CLK", "wave": "p......."},
+        {"name": "DATA", "wave": "x.=..=x.", "data": ["A5", "0F"]},
+        {"name": "RST", "wave": "01......"},
+    ]}
+    m = import_wavedrom(wd)
+    assert [s["name"] for s in m.signals] == ["CLK", "DATA", "RST"]
+    assert m.n_periods == 8
+    assert m.signals[0]["cells"][0]["type"] == "CLK"
+    assert [c["type"] for c in m.signals[0]["cells"]] == ["CLK"] * 8   # p then "." repeats
+    d = m.signals[1]["cells"]
+    assert d[0]["type"] == "Unknown"                                   # x
+    assert (d[2]["type"], d[2]["text"]) == ("BUS", "A5")
+    assert (d[3]["type"], d[3]["text"]) == ("BUS", "A5")              # "." keeps the value
+    assert (d[5]["type"], d[5]["text"]) == ("BUS", "0F")              # next "=" -> next data
+    assert m.signals[2]["cells"][0]["type"] == "L" and m.signals[2]["cells"][1]["type"] == "H"
+    check(m)
+
+
+def test_import_wavedrom_groups_phase_nodes_edges(check):
+    wd = {"signal": [
+        {"name": "CLK", "wave": "p..."},
+        ["SPI",
+         {"name": "CS", "wave": "10..", "node": ".a.."},
+         {"name": "MOSI", "wave": "x=..", "data": ["CMD"], "phase": -0.5, "node": ".b.."}],
+    ], "edge": ["a<->b t_su"]}
+    m = import_wavedrom(wd)
+    assert "SPI" in {g["name"] for g in m.groups.values()}
+    mosi = next(s for s in m.signals if s["name"] == "MOSI")
+    assert mosi["group"] is not None and round(mosi["offset"], 3) == 0.5   # phase negated
+    assert len(m.nodes) == 2 and len(m.edges) == 1
+    assert m.edges[0]["style"] == "double" and m.edges[0]["label"] == "t_su"
+    check(m)
+
+
+def test_wavedrom_roundtrip_model_to_wd_to_model(model, check):
+    """Model -> wavedrom_dict -> import_wavedrom preserves the documented subset."""
+    gid = model.group_signals([1, 2], name="SPI")
+    model.groups[gid]["color"] = "#2266CC"           # not preserved (fine)
+    idx = {s["name"]: i for i, s in enumerate(model.signals)}
+    model.signals[idx["DATA"]]["offset"] = 0.25
+    a = model.add_node(model.signals[idx["CLK"]]["sid"], 2, "start")
+    b = model.add_node(model.signals[idx["DATA"]]["sid"], 4, "start")
+    model.add_edge(a, b, "t_su", "single")
+    m2 = import_wavedrom(wavedrom_dict(model))
+    assert _comparable(m2) == _comparable(model)
+    check(m2)
+
+
+def test_wavedrom_import_idempotent(check):
+    wd = {"signal": [
+        {"name": "CLK", "wave": "p......."},
+        ["BUS_GRP", {"name": "A", "wave": "x.=.=.x.", "data": ["1", "2"]}],
+    ]}
+    m1 = import_wavedrom(wd)
+    m2 = import_wavedrom(wavedrom_dict(m1))          # second pass must equal first
+    assert _comparable(m1) == _comparable(m2)
+    check(m1); check(m2)
+
+
+def test_read_wavedrom_file(tmp_path, check):
+    p = tmp_path / "w.json"
+    p.write_text(json.dumps({"signal": [{"name": "X", "wave": "01."}]}), encoding="utf-8")
+    m = read_wavedrom(str(p))
+    assert [s["name"] for s in m.signals] == ["X"] and m.n_periods == 3
+    check(m)
+
+
+def test_wavedrom_to_dict_pads_unequal_waves(check):
+    d = wavedrom_to_dict({"signal": [{"name": "long", "wave": "0123"},
+                                     {"name": "short", "wave": "1"}]})
+    assert d["n_periods"] == 4
+    assert all(len(s["cells"]) == 4 for s in d["signals"])
+    from retrowave import Model
+    m = Model(); m.load_dict(d); check(m)
 
 
 # ---------------------------------------------------------------- PNG

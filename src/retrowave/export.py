@@ -129,3 +129,95 @@ def export_wavedrom(model, path):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(wavedrom_dict(model), f, ensure_ascii=False, indent=2)
     return path
+
+
+# ---- WaveDrom import (inverse of wavedrom_dict) ----------------------------
+# The mapping is the exact inverse of the export above. Not preserved on a
+# round-trip (documented): per-signal/group colors, the unified-slope styling,
+# group ids (names survive), and anchor edge-position (start/mid/end) — the
+# WaveDrom `node` string encodes only the period, so anchors re-import as "start".
+_WD_REV = {"p": "CLK", "1": "H", "0": "L", "z": "HiZ", "x": "Unknown", "=": "BUS"}
+_WD_EDGE_STYLE = {"<->": "double", "->": "single", "-": "measure"}
+
+
+def _wd_parse_edge(line):
+    import re
+    m = re.match(r"\s*([0-9A-Za-z]+)\s*(<->|->|<-|[-~|>]+)\s*([0-9A-Za-z]+)\s*(.*)", line)
+    if not m:
+        return None
+    frm, op, to, label = m.group(1), m.group(2), m.group(3), m.group(4).strip()
+    return {"frm": frm, "to": to, "label": label,
+            "style": _WD_EDGE_STYLE.get(op, "double")}
+
+
+def wavedrom_to_dict(data):
+    """Parse a WaveDrom JSON object into a RetroWave document dict (the shape
+    Model.load_dict consumes). Pure data transform; see notes above for the
+    preserved subset."""
+    signals, nodes, edges = [], {}, {}
+    seq = {"sid": 0, "gid": 0, "np": 1}
+
+    def parse_signal(obj):
+        seq["sid"] += 1
+        sid = seq["sid"]
+        wave = obj.get("wave", "") or ""
+        data_iter = iter(obj.get("data", []) or [])
+        cells = []
+        pt, ptx = "L", ""                       # a leading "." (rare) becomes L
+        for ch in wave:
+            if ch == ".":                       # continue the previous cell/value
+                cells.append({"type": pt, "text": ptx})
+            else:
+                t = _WD_REV.get(ch, "Unknown")
+                tx = next(data_iter, "") if ch == "=" else ""
+                cells.append({"type": t, "text": tx})
+                pt, ptx = t, tx
+        seq["np"] = max(seq["np"], len(cells))
+        phase = obj.get("phase")
+        signals.append({"name": obj.get("name", "SIG"),
+                        "offset": -float(phase) if phase else 0.0,
+                        "color": None, "group": None, "sid": sid, "cells": cells})
+        for p, c in enumerate(obj.get("node", "") or ""):
+            if c != ".":
+                nodes[c] = {"sid": sid, "period": p, "edge": "start"}
+        return {"type": "sig", "sid": sid}
+
+    def build(items):
+        out = []
+        for it in items:
+            if isinstance(it, list):            # ["name", child, child, ...] -> group
+                name = it[0] if it and isinstance(it[0], str) else "Group"
+                children = build(it[1:])
+                if children:
+                    seq["gid"] += 1
+                    out.append({"type": "group", "gid": f"g{seq['gid']}", "name": name,
+                                "collapsed": False, "color": None, "children": children})
+            elif isinstance(it, dict) and ("wave" in it or "name" in it):
+                out.append(parse_signal(it))
+            # bare {} spacers / config strings are skipped
+        return out
+
+    group_tree = build(data.get("signal", []) if isinstance(data, dict) else [])
+    NP = seq["np"]
+    for s in signals:                           # pad short rows to the longest wave
+        s["cells"] += [{"type": "L", "text": ""} for _ in range(NP - len(s["cells"]))]
+    for line in (data.get("edge", []) if isinstance(data, dict) else []):
+        e = _wd_parse_edge(line)
+        if e and e["frm"] in nodes and e["to"] in nodes:
+            edges[len(edges)] = e
+    return {"version": "2.0", "n_periods": NP, "signals": signals,
+            "group_tree": group_tree, "nodes": nodes, "edges": list(edges.values())}
+
+
+def import_wavedrom(data):
+    """WaveDrom JSON object -> a validated Model (runs load_dict, which enforces
+    the §2.6 invariants and prunes orphan annotations)."""
+    from .model import Model
+    m = Model()
+    m.load_dict(wavedrom_to_dict(data))
+    return m
+
+
+def read_wavedrom(path):
+    with open(path, encoding="utf-8") as f:
+        return import_wavedrom(json.load(f))

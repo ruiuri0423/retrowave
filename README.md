@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.33**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.34**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -205,20 +205,24 @@ never duplicated.
 
 ## Interoperability
 
-- **WaveDrom JSON export** (*File → Export WaveDrom JSON*) maps signals, groups
-  (nested arrays), per-signal phase, and anchors/relationship lines (node/edge) to
-  the WaveDrom schema, so diagrams can be shared on GitHub/wikis or rendered by
-  WaveDrom tooling. Colors and the custom slope styling are not carried over —
-  WaveDrom redraws with its own skin — so the native RetroWave format remains the
-  source of truth.
+- **WaveDrom JSON, both directions** (*File → Import / Export WaveDrom JSON*). Export
+  maps signals, groups (nested arrays), per-signal phase, and anchors/relationship
+  lines to the WaveDrom schema; import parses it back. A `Model → export → import`
+  round-trip preserves names, cells, periods, grouping, phase, anchors, and edges
+  (colors, the custom slope, and anchor edge-position are intentionally not carried —
+  WaveDrom redraws with its own skin), so diagrams can be shared on GitHub/wikis or
+  exchanged with WaveDrom tooling.
 
 ## Roadmap
 
+- **AI / MCP interface.** An MCP server so an LLM in your AI session can drive
+  RetroWave by direct command injection (build a diagram step by step, then render) —
+  WaveDrom import (this release) is the groundwork.
 - **VCD import.** Render deterministic simulation output (the source of truth in a
   Verilog flow) into clean, publication-ready diagrams.
-- **Quality-of-life:** multi-select drag, negative offsets (phase-left), incremental
-  redraw for very large diagrams, and dashed period grid lines in PNG output
-  (currently solid in PNG; SVG/EPS keep dashes).
+- **Quality-of-life:** negative offsets (phase-left), incremental redraw for very
+  large diagrams, and dashed period grid lines in PNG output (currently solid in
+  PNG; SVG/EPS keep dashes).
 
 ---
 

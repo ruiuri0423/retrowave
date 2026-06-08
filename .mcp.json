@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "retrowave": {
+      "command": "python",
+      "args": ["run_mcp.py"]
+    }
+  }
+}

@@ -61,8 +61,19 @@ class App(tk.Tk):
         self._build_menubar(); self._build_toolbar(); self._build_main()
         self._build_statusbar(); self._bind_keys()
         self._set_tool("H"); self.render()          # first draw must be synchronous so the window is complete on appearance
+        self._close_splash()                        # dismiss the PyInstaller onefile splash, if present
         self.after(150, self._startup_templates)    # load templates / warn about missing files after the window shows
         self.after(450, self._maybe_show_tutorial)  # show the tutorial on first launch
+
+    @staticmethod
+    def _close_splash():
+        """Close the onefile startup splash once the window is up. `pyi_splash`
+        exists only in PyInstaller builds made with --splash, so guard the import."""
+        try:
+            import pyi_splash       # noqa: F401  (injected by PyInstaller at runtime)
+            pyi_splash.close()
+        except Exception:
+            pass
 
     def _maybe_show_tutorial(self, force=False):
         """First-launch tutorial: can be disabled by an env var (testing/automation) and user preference; the Help menu can force it open again."""

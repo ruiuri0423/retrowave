@@ -68,16 +68,25 @@ jobs:
                   VarFileInfo([VarStruct('Translation', [1028, 1200])])])
           "@ | Out-File -Encoding utf8 version_info.txt
 
-      - name: Build onefile exe
+      # --exclude-module trims large stdlib never used at runtime → smaller bundle,
+      # so onefile self-extraction and antivirus scanning are faster on launch.
+      # --splash shows assets/splash.png instantly while onefile self-extracts
+      # (App._close_splash dismisses it once the window is drawn).
+      - name: Build onefile exe (with splash)
         run: >
           pyinstaller --onefile --windowed --noupx --name RetroWave
-          --version-file version_info.txt --paths src run.py
+          --version-file version_info.txt --splash assets/splash.png
+          --exclude-module pytest --exclude-module unittest --exclude-module pydoc
+          --exclude-module doctest --exclude-module lib2to3 --exclude-module tkinter.test
+          --paths src run.py
 
-      - name: Build onedir variant (lower AV false-positive rate)
+      - name: Build onedir variant (faster startup; lower AV false-positive rate)
         run: >
           pyinstaller --windowed --noupx --name RetroWave
-          --version-file version_info.txt --paths src
-          --distpath dist_onedir run.py
+          --version-file version_info.txt
+          --exclude-module pytest --exclude-module unittest --exclude-module pydoc
+          --exclude-module doctest --exclude-module lib2to3 --exclude-module tkinter.test
+          --paths src --distpath dist_onedir run.py
 
       - name: Sign binaries (only when cert secrets are configured)
         if: env.HAS_CERT == 'true'

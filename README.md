@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.32**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.33**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -35,15 +35,22 @@ templates, and export to PNG, SVG or EPS.
 python run.py            # or: cd src && python -m retrowave
 ```
 
-No Python? Grab the prebuilt **Windows onefile exe** from the
-[Releases](../../releases) page (built automatically from each `v*` tag — tests run
-first, PNG export included).
+No Python? Grab a prebuilt **Windows** download from the [Releases](../../releases)
+page (built automatically from each `v*` tag — tests run first, PNG export included):
 
-> **SmartScreen / antivirus note**: the exe is currently unsigned, so Windows may show
-> a "protected your PC" prompt (More info → Run anyway). Each release ships a
-> `SHA256SUMS.txt` to verify integrity, plus an **onedir zip** variant that trips far
-> fewer antivirus heuristics than the self-extracting onefile. Code signing hooks are
-> already built into the release pipeline (see `.github/workflows/release.yml`).
+- **`...-onedir.zip`** — **recommended for fastest startup.** Unzip and run
+  `RetroWave.exe`. It launches almost instantly because nothing is unpacked at runtime.
+- **`...-windows.exe`** — a single self-contained file (handy to carry around), but it
+  **self-extracts to a temp folder on every launch**, so the first start in particular
+  can take a few seconds — more on slow disks or with aggressive antivirus. A splash
+  screen shows while it unpacks.
+
+> **SmartScreen / antivirus note**: the binaries are currently unsigned, so Windows may
+> show a "protected your PC" prompt (More info → Run anyway), and antivirus scanning can
+> add startup delay (worst on the onefile build). Each release ships a `SHA256SUMS.txt`
+> to verify integrity. Code signing hooks are already in the release pipeline
+> (see `.github/workflows/release.yml`) and will remove most of this friction once a
+> certificate is in place.
 
 The window opens with a small demo waveform so you can start experimenting
 immediately — and a short interactive tutorial on first launch.

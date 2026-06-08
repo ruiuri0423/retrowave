@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.32** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.33** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#15-changelog) at the end.
 
@@ -1129,6 +1129,18 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.33** — **Startup-time work (packaging, not the app core).** Measured cold start from
+  source is ~0.3 s to first frame; the slowness reported on some machines is the PyInstaller
+  **onefile** path — it self-extracts to a temp folder on every launch and unsigned binaries
+  draw antivirus scanning, both highly machine-dependent (disk speed, AV). Mitigations: the
+  release now (1) recommends the **onedir** build for fastest startup (no per-launch
+  extraction), (2) adds a **splash screen** (`assets/splash.png`) to the onefile build so it
+  feels responsive while unpacking — dismissed by `App._close_splash()` once the first frame
+  is drawn (guarded import of `pyi_splash`, a no-op from source), and (3) **excludes** unused
+  large stdlib (pytest/unittest/pydoc/doctest/lib2to3/tkinter.test) from both builds to shrink
+  the bundle, cutting extraction and scan time. README documents the onedir-vs-onefile
+  trade-off. Deferred startup work (template scan, tutorial) was already off the first-frame
+  path since earlier versions.
 - **v1.32** — **Help heading consistency + README rework.** (1) The Chinese Usage catalog used
   full-width 【】 section brackets, so its headings rendered as literal text while English used
   the styled `[Section]` form (blue bold, brackets stripped). The catalog now uses ASCII `[ ]`,

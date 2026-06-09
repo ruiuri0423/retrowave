@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.38** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.39** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1184,6 +1184,13 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.39** — **MCP `render` returns a path, not inlined image bytes.** `render` previously put the
+  full PNG as base64 (and SVG as markup) into its result; a real 10-signal AHB diagram produced a
+  ~63K-character tool result that overflowed the caller's token budget. `render` now writes the file
+  and returns `{path, bytes}` only — the caller opens the path to view it (verified end-to-end by
+  building an AHB wait-state diagram through the live MCP tools). Tests updated to assert the file
+  exists and no base64 blob is returned. (A future enhancement could return a proper MCP image
+  content block for true inline display.)
 - **v1.38** — **Fix MCP tool parameter typing + a method-name bug.** `WaveSession` methods had no
   type annotations, so FastMCP inferred every parameter as `string`; integer/array arguments
   (`signal`, `period`, `indices`, …) arrived as strings and blew up on the first int comparison

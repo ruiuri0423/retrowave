@@ -16,7 +16,6 @@ package installed:
 `open_document` / `import_wavedrom` only *load an existing saved file* — the
 native document JSON is a persistence format, not an authoring surface.
 """
-import base64
 import json
 import os
 import tempfile
@@ -24,7 +23,7 @@ from typing import List, Optional
 
 from . import __version__
 from .document import Document
-from .export import export_png, export_svg, svg_string, wavedrom_dict, wavedrom_to_dict
+from .export import export_png, export_svg, wavedrom_dict, wavedrom_to_dict
 from .geometry import Geometry
 from .templates import TemplateLibrary
 
@@ -104,20 +103,21 @@ class WaveSession:
 
     # ---- render ----
     def render(self, format: str = "png", scale: int = 2, path: Optional[str] = None):
-        """Render the current diagram. PNG returns base64 (for an inline image
-        block) + a saved path; SVG returns the markup. PNG needs Pillow."""
+        """Render the current diagram to a file and return its PATH (read the file
+        to view it). PNG needs Pillow; SVG is zero-dependency. The image bytes are
+        deliberately NOT inlined — a base64/markup blob would overflow the tool
+        result; the caller opens `path` instead."""
         fmt = format.lower()
         if path is None:
             path = os.path.join(self._outdir, f"waveform.{fmt}")
         try:
             if fmt == "png":
                 export_png(self.model, self.geom, path, scale=scale)
-                with open(path, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("ascii")
-                return _ok(format="png", path=path, image_base64=b64)
+                size = os.path.getsize(path)
+                return _ok(format="png", path=path, bytes=size)
             if fmt == "svg":
                 export_svg(self.model, self.geom, path)
-                return _ok(format="svg", path=path, svg=svg_string(self.model, self.geom))
+                return _ok(format="svg", path=path, bytes=os.path.getsize(path))
             return _err(f"unknown format: {format}")
         except ImportError:
             return _err("PNG export needs Pillow (pip install pillow); try format='svg'")

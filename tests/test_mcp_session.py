@@ -93,14 +93,19 @@ def test_import_wavedrom_file(s, tmp_path):
 
 
 def test_render_svg_no_pillow_needed(s):
+    import os
     r = s.render(format="svg")
-    assert r["ok"] and r["svg"].startswith("<svg") and r["path"].endswith(".svg")
+    assert r["ok"] and r["path"].endswith(".svg") and r["bytes"] > 0
+    assert os.path.exists(r["path"])             # bytes returned, not inlined markup
+    assert open(r["path"], encoding="utf-8").read().startswith("<svg")
 
 
 def test_render_png_when_pillow(s):
+    import os
     pytest.importorskip("PIL")
     r = s.render(format="png", scale=1)
-    assert r["ok"] and r["image_base64"] and r["path"].endswith(".png")
+    assert r["ok"] and r["path"].endswith(".png") and r["bytes"] > 0
+    assert os.path.exists(r["path"]) and "image_base64" not in r   # no giant blob
 
 
 def test_render_unknown_format(s):

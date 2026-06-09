@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.41** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.42** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1188,6 +1188,16 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.42** — **Gesture-mode & cycle-highlight fixes (from real use of v1.41).** (1) Cycle
+  highlight: plain header click now lights up *only* that column (click again clears);
+  Shift/Ctrl+click adds columns (point multi-select, no drag) — previously every plain click was
+  additive. (2) `Esc` in gesture mode clears the selection/palette but stays in gesture mode
+  (was flipping the cursor to pan while the mode stayed gesture). (3) The floating palette now
+  closes when the app loses focus to another application (deferred `focus_displayof()` check, so
+  an in-app dialog like the BUS-value prompt doesn't close it). (4) After a gesture box-select or
+  applying an element, drag/select state is fully reset — the palette overlaps the canvas, so a
+  button release leaking through after it closed was starting a spurious second box-select.
+  Guards added in `tests/test_ui_features.py`.
 - **v1.41** — **Cycle-column highlight + experimental gesture mode.** (1) Clicking a period header
   (`T0`/`T1`/…) toggles a full-height light-blue highlight over that whole cycle column across all
   signals — view-only emphasis for reading alignment, multiple columns allowed, **not** persisted

@@ -11,16 +11,19 @@ def _header_xy(app, period):
     return (period * g.period_w + g.period_w // 2, g.header_h // 2)
 
 
-def test_header_click_toggles_cycle_highlight(app):
+def test_header_click_single_vs_multi(app):
     assert app.hl_periods == set()
-    x, y = _header_xy(app, 3)
-    app.on_press(Ev(x, y))                       # click header T3
+    app.on_press(Ev(*_header_xy(app, 3)))                 # plain click = single
     assert app.hl_periods == {3}
-    app.on_press(Ev(*_header_xy(app, 5)))
-    assert app.hl_periods == {3, 5}              # multiple columns
-    app.on_press(Ev(x, y))                       # click T3 again toggles off
+    app.on_press(Ev(*_header_xy(app, 5)))                 # plain click elsewhere = replace
     assert app.hl_periods == {5}
-    app.update_idletasks()                        # renders without error
+    app.on_press(Ev(*_header_xy(app, 7), state=retrowave.SHIFT_MASK))   # Shift+click = add
+    assert app.hl_periods == {5, 7}
+    app.on_press(Ev(*_header_xy(app, 5), state=retrowave.CTRL_MASK))    # Ctrl+click = toggle off
+    assert app.hl_periods == {7}
+    app.on_press(Ev(*_header_xy(app, 7)))                 # plain click on the only one = clear
+    assert app.hl_periods == set()
+    app.update_idletasks()
 
 
 def test_header_click_does_not_paint(app):
@@ -96,4 +99,33 @@ def test_gesture_drag_promotes_to_pan_not_paint(app):
     assert app._panning is True
     app.on_release(Ev(x + 40, y))
     assert app.model.signals[2]["cells"][4]["type"] != "H"
+    assert_invariants(app.model)
+
+
+def test_esc_in_gesture_mode_stays_gesture(app):
+    """Esc clears selection/palette but must NOT switch gesture mode to pan."""
+    app._gesture_mode = True
+    app.on_press(Ev(*cell_xy(app, 2, 4))); app.on_release(Ev(*cell_xy(app, 2, 4)))
+    assert app._palette is not None
+    app._enter_pan_mode()                         # Esc
+    assert app._gesture_mode is True              # still gesture, not pan
+    assert app.active_tool is not None            # tool not nulled (that's pan-mode behavior)
+    assert app._palette is None and app.cell_sel is None
+
+
+def test_gesture_box_select_resets_state_after_palette(app):
+    """After a Shift-drag box-select pops the palette, drag/select state is cleared
+    so a stray release leaking through the closed palette can't start a new box."""
+    app._gesture_mode = True
+    x0, y0 = cell_xy(app, 1, 1); x1, y1 = cell_xy(app, 2, 3)
+    app.on_press(Ev(x0, y0, state=retrowave.SHIFT_MASK))
+    app.on_motion(Ev(x1, y1, state=retrowave.SHIFT_MASK))
+    app.on_release(Ev(x1, y1, state=retrowave.SHIFT_MASK))
+    assert app.cell_sel == (1, 2, 1, 3) and app._palette is not None
+    assert app._selecting is False and app._press is None     # state reset
+    # apply an element, then a stray release on the canvas must NOT create a box
+    app._apply_gesture_element("HiZ")
+    before = app.cell_sel
+    app.on_release(Ev(x1, y1))                     # leaked release, clean state
+    assert app.cell_sel == before                  # no spurious re-box
     assert_invariants(app.model)

@@ -399,12 +399,17 @@ class App(tk.Tk):
         if self.cell_sel is not None:          # box-select active -> fill that range
             self._fill_selection(t); return
         self.active_tool = t; self._refresh_tools()
-        self.wave_cv.configure(cursor="")
+        self.wave_cv.configure(cursor="hand2" if self._gesture_mode else "")
         self.request_render()
 
     def _enter_pan_mode(self):
-        """Esc: from any state, fall back to canvas pan mode (clear box-select, deselect element)."""
+        """Esc: clear box-select. In gesture mode this just clears selection + the
+        palette and stays in gesture mode; otherwise it falls back to pan mode."""
         self.cell_sel = None
+        self._close_palette()
+        if self._gesture_mode:                    # Esc must NOT switch gesture mode to pan
+            self.wave_cv.configure(cursor="hand2")
+            self.request_render(); return
         self.active_tool = None; self._refresh_tools()
         self.wave_cv.configure(cursor="fleur")
         self.request_render()
@@ -438,12 +443,25 @@ class App(tk.Tk):
             self.wave_cv.configure(cursor="fleur")
 
     def _close_palette(self):
+        if getattr(self, "_palette_focusbind", None) is not None:
+            try:
+                self.unbind("<FocusOut>", self._palette_focusbind)
+            except Exception:
+                pass
+            self._palette_focusbind = None
         if self._palette is not None:
             try:
                 self._palette.destroy()
             except Exception:
                 pass
             self._palette = None
+
+    def _palette_focus_out(self, _e=None):
+        """Close the palette when the app loses focus to another application.
+        Deferred check: focus_displayof() is None only when no in-app widget holds
+        focus (true alt-tab), so moving focus to a child dialog doesn't close it."""
+        self.after(60, lambda: self._palette is not None
+                   and self.focus_displayof() is None and self._close_palette())
 
     def _palette_icon(self, parent, kind):
         """A 28x20 mini-waveform icon for the floating gesture palette."""
@@ -486,11 +504,16 @@ class App(tk.Tk):
         pal.geometry(f"+{x_root + 8}+{y_root + 12}")
         pal.bind("<Escape>", lambda e: self._close_palette())
         self._palette = pal
+        self._palette_focusbind = self.bind("<FocusOut>", self._palette_focus_out, add="+")
 
     def _apply_gesture_element(self, kind):
         """Apply the chosen element (or clear) to the current selection, then close."""
         sel = self.cell_sel
         self._close_palette()
+        # clear any lingering drag/select state so the click's stray release (the
+        # palette has closed and the canvas is now underneath) can't start a box
+        self._selecting = False; self._press = None; self._g_press = None
+        self._moved = False; self._erase_marquee(); self._cancel_longpress()
         if sel is None:
             return
         msg = self._fill_rect(sel, "L" if kind == "__del__" else kind)
@@ -689,10 +712,13 @@ class App(tk.Tk):
         cx, cy = self._ev_xy(e)
         self._press_xy = (cx, cy)
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
-        if cy < self.geom.header_h:               # click the period header -> toggle cycle column highlight
+        if cy < self.geom.header_h:               # click the period header -> cycle column highlight
             p = int(cx // self.geom.period_w)
             if 0 <= p < self.model.n_periods:
-                self.hl_periods ^= {p}
+                if ctrl or shift:                 # additive multi-select (click, no drag)
+                    self.hl_periods ^= {p}
+                else:                             # single: light up only this column (click same = clear)
+                    self.hl_periods = set() if self.hl_periods == {p} else {p}
                 self.request_render()
             return
         nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
@@ -818,6 +844,9 @@ class App(tk.Tk):
             self._erase_marquee(); self.request_render()
             if self.cell_sel:
                 if self._gesture_mode:             # gesture box-select -> palette over the block
+                    # fully reset gesture/drag state first: the palette overlaps the canvas, so a
+                    # button release leaking through after it closes must not start a new box-select
+                    self._selecting = False; self._press = None; self._moved = False
                     self._show_gesture_palette(e.x_root, e.y_root)
                 else:
                     self.status.configure(text=tr(" Box-selected; press an element key to fill, or Ctrl+C to copy"))

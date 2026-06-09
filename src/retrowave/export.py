@@ -58,9 +58,13 @@ def export_svg(model, geom, path):
     return path
 
 
-def wavedrom_dict(model):
+def wavedrom_dict(model, hscale=None):
     """Convert to the WaveDrom JSON structure (interchange format; colors and the
-    unified-slope styling are not preserved, node/edge annotations carry over)."""
+    unified-slope styling are not preserved, node/edge annotations carry over).
+
+    `hscale` widens the rendered cells so long bus labels (e.g. "NONSEQ") are not
+    cramped in WaveDrom's narrow default cells. None = auto: scale up with the
+    longest bus value; pass a number to force it, or 1 to disable."""
     m = model
     basech = {"CLK": "p", "H": "1", "L": "0", "HiZ": "z", "Unknown": "x", "BUS": "="}
     sid_nodes = {}                          # sid -> {period: nid}
@@ -122,6 +126,12 @@ def wavedrom_dict(model):
                 ed.append(line)
         if ed:
             doc["edge"] = ed
+    if hscale is None:                          # auto: widen for the longest bus label
+        longest = max((len(c.get("text", "")) for s in m.signals for c in s["cells"]
+                       if c["type"] == "BUS"), default=0)
+        hscale = 2 if longest <= 4 else 3 if longest <= 8 else 4
+    if hscale and hscale != 1:
+        doc["config"] = {"hscale": hscale}
     return doc
 
 
@@ -132,22 +142,39 @@ def export_wavedrom(model, path):
 
 
 # ---- WaveDrom import (inverse of wavedrom_dict) ----------------------------
-# The mapping is the exact inverse of the export above. Not preserved on a
-# round-trip (documented): per-signal/group colors, the unified-slope styling,
-# group ids (names survive), and anchor edge-position (start/mid/end) — the
-# WaveDrom `node` string encodes only the period, so anchors re-import as "start".
-_WD_REV = {"p": "CLK", "1": "H", "0": "L", "z": "HiZ", "x": "Unknown", "=": "BUS"}
-_WD_EDGE_STYLE = {"<->": "double", "->": "single", "-": "measure"}
+# Accepts the broad WaveDrom wave vocabulary, not just what our export emits.
+# Not preserved on a round-trip (documented): per-signal/group colors, the
+# unified-slope styling, group ids (names survive), and anchor edge-position
+# (the `node` string encodes only the period, so anchors re-import as "start").
+#
+# Clock/level variants collapse to our element set; the colored data boxes
+# (= and 2..9) all become BUS and each consumes the next `data[]` entry.
+_WD_REV = {
+    "p": "CLK", "P": "CLK", "n": "CLK", "N": "CLK",   # clock variants
+    "1": "H", "h": "H", "H": "H", "u": "H",           # high / weak pull-up
+    "0": "L", "l": "L", "L": "L", "d": "L",           # low / weak pull-down
+    "z": "HiZ", "x": "Unknown",
+}
+_WD_DATA = set("=23456789")                            # data boxes -> BUS, consume data[]
+
+
+def _wd_edge_style(op):
+    """WaveDrom edge op -> our style. <…> = double; …> = single (causal);
+    otherwise a plain measurement line."""
+    if "<" in op and ">" in op:
+        return "double"
+    if ">" in op:
+        return "single"
+    return "measure"
 
 
 def _wd_parse_edge(line):
     import re
-    m = re.match(r"\s*([0-9A-Za-z]+)\s*(<->|->|<-|[-~|>]+)\s*([0-9A-Za-z]+)\s*(.*)", line)
+    m = re.match(r"\s*([0-9A-Za-z]+)\s*([<>~|+*-]+)\s*([0-9A-Za-z]+)\s*(.*)", line)
     if not m:
         return None
     frm, op, to, label = m.group(1), m.group(2), m.group(3), m.group(4).strip()
-    return {"frm": frm, "to": to, "label": label,
-            "style": _WD_EDGE_STYLE.get(op, "double")}
+    return {"frm": frm, "to": to, "label": label, "style": _wd_edge_style(op)}
 
 
 def wavedrom_to_dict(data):
@@ -165,13 +192,14 @@ def wavedrom_to_dict(data):
         cells = []
         pt, ptx = "L", ""                       # a leading "." (rare) becomes L
         for ch in wave:
-            if ch == ".":                       # continue the previous cell/value
+            if ch in ".|":                      # "." continue; "|" gap -> keep alignment
                 cells.append({"type": pt, "text": ptx})
+            elif ch in _WD_DATA:                # data box -> BUS, consume next data[]
+                ptx = next(data_iter, ""); pt = "BUS"
+                cells.append({"type": "BUS", "text": ptx})
             else:
-                t = _WD_REV.get(ch, "Unknown")
-                tx = next(data_iter, "") if ch == "=" else ""
-                cells.append({"type": t, "text": tx})
-                pt, ptx = t, tx
+                pt = _WD_REV.get(ch, "Unknown"); ptx = ""
+                cells.append({"type": pt, "text": ptx})
         seq["np"] = max(seq["np"], len(cells))
         phase = obj.get("phase")
         signals.append({"name": obj.get("name", "SIG"),

@@ -46,7 +46,8 @@ def test_svg_offset_extends_width(model, geom):
 # ---------------------------------------------------------------- WaveDrom
 def test_wavedrom_demo_waves(model):
     d = wavedrom_dict(model)
-    assert set(d) == {"signal"}               # demo has no annotations -> no edge key
+    assert set(d) == {"signal", "config"}     # no annotations -> no edge; config carries hscale
+    assert d["config"]["hscale"] >= 2         # widened so bus labels aren't cramped
     waves = {s["name"]: s for s in d["signal"]}
     assert waves["CLK"]["wave"] == "p" + "." * 11
     assert waves["RST_N"]["wave"] == "1" + "." * 11
@@ -171,6 +172,51 @@ def test_wavedrom_import_idempotent(check):
     m2 = import_wavedrom(wavedrom_dict(m1))          # second pass must equal first
     assert _comparable(m1) == _comparable(m2)
     check(m1); check(m2)
+
+
+def test_import_wavedrom_data_boxes(check):
+    """WaveDrom colored data boxes (2..9), not just '=', map to BUS and consume
+    data[] in order (the test.json pattern that previously imported as Unknown)."""
+    wd = {"signal": [
+        {"name": "HCLK", "wave": "p......"},
+        {"name": "HTRANS", "wave": "x344xxx", "data": ["NONSEQ", "SEQ", "SEQ"]},
+        {"name": "HADDR", "wave": "x345xxx", "data": ["A1", "A2", "A3"], "node": ".abc..."},
+    ], "edge": ["a~>b Pipeline"], "config": {"hscale": 1.5}}
+    m = import_wavedrom(wd)
+    tr = [(c["type"], c.get("text", "")) for c in
+          next(s for s in m.signals if s["name"] == "HTRANS")["cells"]]
+    assert tr[0] == ("Unknown", "")
+    assert tr[1:4] == [("BUS", "NONSEQ"), ("BUS", "SEQ"), ("BUS", "SEQ")]   # 3,4,4 -> 3 boxes
+    ad = [(c["type"], c.get("text", "")) for c in
+          next(s for s in m.signals if s["name"] == "HADDR")["cells"]]
+    assert ad[1:4] == [("BUS", "A1"), ("BUS", "A2"), ("BUS", "A3")]         # 3,4,5 distinct boxes
+    assert len(m.nodes) == 3                                                # a,b,c anchors
+    assert m.edges and m.edges[0]["style"] == "single"                     # ~> = causal/single
+    check(m)
+
+
+def test_import_wavedrom_clock_and_level_variants(check):
+    wd = {"signal": [
+        {"name": "nclk", "wave": "n..."},
+        {"name": "lh", "wave": "lhLH"},
+        {"name": "weak", "wave": "du.."},
+        {"name": "gap", "wave": "1|0."},
+    ]}
+    m = import_wavedrom(wd)
+    by = {s["name"]: [c["type"] for c in s["cells"]] for s in m.signals}
+    assert by["nclk"][0] == "CLK"
+    assert by["lh"] == ["L", "H", "L", "H"]
+    assert by["weak"][0] == "L" and by["weak"][1] == "H"
+    assert by["gap"] == ["H", "H", "L", "L"]      # '|' keeps the previous value / alignment
+    check(m)
+
+
+def test_wavedrom_export_hscale(model):
+    assert wavedrom_dict(model)["config"]["hscale"] >= 2            # auto (demo labels <=4)
+    assert "config" not in wavedrom_dict(model, hscale=1)           # explicit 1 disables
+    assert wavedrom_dict(model, hscale=5)["config"]["hscale"] == 5  # explicit override
+    model.set_cell(2, 0, "BUS", "VERYLONGLABEL")                    # long label -> wider
+    assert wavedrom_dict(model)["config"]["hscale"] >= 4
 
 
 def test_read_wavedrom_file(tmp_path, check):

@@ -25,3 +25,11 @@ Thumbs.db
 CLAUDE.md
 docs/DEVELOPMENT.md
 docs/COWORK_INSTRUCTIONS.md
+
+# Local fixtures & rendered artifacts (do not commit) — committed art lives in assets/
+/test.json
+/*.png
+/_*.py
+
+# Local Claude Code MCP wiring (machine-specific; not for the repo)
+.mcp.json

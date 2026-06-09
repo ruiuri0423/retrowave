@@ -54,6 +54,15 @@ class WaveSession:
         return self.doc.model
 
     # ---- read / lifecycle ----
+    def help(self):
+        """Read this FIRST if unsure how to use RetroWave. Returns the full guide
+        (element vocabulary, the command list, and a worked example). You author
+        waveforms ONLY through commands — never by writing document JSON. Same
+        content as the waveform:// resources, surfaced as a tool so you can pull
+        it into context on demand."""
+        return _ok(guide="\n\n".join(f"[{uri}]\n{text}"
+                                     for uri, text in _RESOURCES.items()))
+
     def get_document(self, full: bool = False):
         """Current state. `compact` is a WaveDrom-style readable view; `signals`
         maps each command index to a name/group; `full=True` adds the raw doc."""
@@ -260,6 +269,7 @@ _RESOURCES = {
 
 # Method name -> docstring shown to the model (kept short; full guide is a resource).
 _TOOLS = [
+    "help",
     "get_document", "new_document", "open_document", "import_wavedrom", "render",
     "undo", "redo", "add_signal", "remove_signals", "rename_signal", "set_offset",
     "set_color", "set_periods", "set_cell", "fill", "create_group",

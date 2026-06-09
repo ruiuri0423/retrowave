@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.39** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.40** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -857,9 +857,13 @@ document.edge   = for each edge: "<frm><op><to> <label>"
                   op: double->"<->", single->"->", measure->"-"
 ```
 
-**Import (the exact inverse).** WaveDrom JSON also imports back into a document
+**Import (the broad WaveDrom vocabulary).** WaveDrom JSON imports back into a document
 (`import_wavedrom` / `wavedrom_to_dict`, available in the UI as *File → Import WaveDrom JSON*).
-The reverse-char map is `p->CLK 1->H 0->L z->HiZ x->Unknown =->BUS`; a `.` repeats the previous
+It accepts more than our own export emits: the colored data boxes `=` and `2`–`9` all become BUS
+and **each consumes the next `data[]` entry**; clock variants `p/P/n/N`→CLK, level variants
+`1/h/H/u`→H and `0/l/L/d`→L, `z`→HiZ, `x`→Unknown; `|` (gap) keeps alignment. Edge ops are
+classified by shape (`<…>`=double, `…>`=single so `~>` is causal/single, else a measurement line).
+The base reverse map is `p->CLK 1->H 0->L z->HiZ x->Unknown =->BUS`; a `.` repeats the previous
 cell (for BUS, the previous value); each `=` consumes the next `data[]` entry; `phase` negates back
 to `offset`; nested arrays rebuild the group tree (names only — fresh gids are minted); `node`
 strings rebuild anchors and `edge` strings rebuild relationship lines. Rows of unequal length pad
@@ -1184,6 +1188,17 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.40** — **Wider WaveDrom import support + less-cramped export + an MCP `help` tool.**
+  *Import:* the full WaveDrom wave vocabulary now parses, not just our own export — the colored
+  data boxes `2`–`9` (as well as `=`) all become BUS and each consumes the next `data[]` entry
+  (previously they imported as Unknown with the labels lost); clock variants `n/N/P`, level
+  variants `l/h/L/H`, weak `d/u`, and the `|` gap are mapped; edge ops are classified by shape
+  (`<…>`=double, `…>`=single/causal so `~>` is single, else measurement). *Export:* `wavedrom_dict`
+  now emits a `config.hscale` (auto-scaled to the longest bus label, or pass `hscale=`) so long
+  values like `NONSEQ` aren't squished in WaveDrom's narrow default cells. *MCP:* a `help` tool
+  returns the schema/commands/guide so a model can pull the guidance into context on demand (the
+  `waveform://` resources still exist). Guards: data-box/variant import tests, hscale tests, and
+  `test_help_returns_guide`. Verified by round-tripping the user's `test.json`.
 - **v1.39** — **MCP `render` returns a path, not inlined image bytes.** `render` previously put the
   full PNG as base64 (and SVG as markup) into its result; a real 10-signal AHB diagram produced a
   ~63K-character tool result that overflowed the caller's token budget. `render` now writes the file

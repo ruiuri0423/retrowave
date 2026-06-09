@@ -120,6 +120,14 @@ def test_undo_redo(s):
     assert_invariants(s.model)
 
 
+def test_help_returns_guide(s):
+    r = s.help()
+    assert r["ok"] and "command" in r["guide"].lower()
+    assert "add_signal" in r["guide"] and "waveform://schema" in r["guide"]
+    from retrowave import mcp_server
+    assert "help" in mcp_server._TOOLS          # surfaced as a tool, not just a resource
+
+
 def test_tool_list_matches_methods():
     """Every advertised tool name is a real WaveSession method (no typos)."""
     from retrowave import mcp_server

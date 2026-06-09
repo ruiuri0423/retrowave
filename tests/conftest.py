@@ -115,7 +115,7 @@ def app(_root):
     a._erase_marquee(); a._selecting = False; a._panning = False; a._pan_anchor = None
     a._drag_value = None; a._hover = None; a._hover_node = None; a._hover_edge = None
     a._connecting = False; a._connect_from = None; a._connect_xy = None
-    a.hl_periods = set()                       # cycle highlights
+    a.hl_periods = set(); a._cycle_anchor = None   # cycle highlights
     a._cancel_longpress(); a._close_palette()  # gesture-mode transients
     a._gesture_mode = False; a._g_press = None
     a.wave_cv.xview_moveto(0.0); a.wave_cv.yview_moveto(0.0); a.name_cv.yview_moveto(0.0)

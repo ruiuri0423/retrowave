@@ -17,11 +17,15 @@ def test_header_click_single_vs_multi(app):
     assert app.hl_periods == {3}
     app.on_press(Ev(*_header_xy(app, 5)))                 # plain click elsewhere = replace
     assert app.hl_periods == {5}
-    app.on_press(Ev(*_header_xy(app, 7), state=retrowave.SHIFT_MASK))   # Shift+click = add
-    assert app.hl_periods == {5, 7}
-    app.on_press(Ev(*_header_xy(app, 5), state=retrowave.CTRL_MASK))    # Ctrl+click = toggle off
-    assert app.hl_periods == {7}
-    app.on_press(Ev(*_header_xy(app, 7)))                 # plain click on the only one = clear
+    app.on_press(Ev(*_header_xy(app, 8), state=retrowave.SHIFT_MASK))   # Shift = range from anchor(5)..8
+    assert app.hl_periods == {5, 6, 7, 8}
+    app.on_press(Ev(*_header_xy(app, 2), state=retrowave.CTRL_MASK))    # Ctrl = add single
+    assert app.hl_periods == {2, 5, 6, 7, 8}
+    app.on_press(Ev(*_header_xy(app, 2), state=retrowave.CTRL_MASK))    # Ctrl again = toggle off
+    assert app.hl_periods == {5, 6, 7, 8}
+    app.on_press(Ev(*_header_xy(app, 3)))                 # plain click = single (replace)
+    assert app.hl_periods == {3}
+    app.on_press(Ev(*_header_xy(app, 3)))                 # same again = clear
     assert app.hl_periods == set()
     app.update_idletasks()
 

@@ -53,6 +53,7 @@ class App(tk.Tk):
         self._pan_anchor = None
         self._render_job = None                 # pending coalesced redraw (after_idle id)
         self.hl_periods = set()                 # cycle columns highlighted (view-only, not saved)
+        self._cycle_anchor = None               # last single-clicked cycle (for Shift range select)
         self._gesture_mode = bool(usersettings.get_value("experimental_gesture", False))
         self._palette = None                    # floating element palette (gesture mode)
         self._g_press = None                    # gesture pending-press state
@@ -715,10 +716,14 @@ class App(tk.Tk):
         if cy < self.geom.header_h:               # click the period header -> cycle column highlight
             p = int(cx // self.geom.period_w)
             if 0 <= p < self.model.n_periods:
-                if ctrl or shift:                 # additive multi-select (click, no drag)
+                if shift and self._cycle_anchor is not None:   # Shift = range from the anchor (like the name column)
+                    a, b = sorted((self._cycle_anchor, p))
+                    self.hl_periods = set(range(a, b + 1))
+                elif ctrl:                        # Ctrl = toggle this single column (additive)
                     self.hl_periods ^= {p}
-                else:                             # single: light up only this column (click same = clear)
+                else:                             # plain = light up only this column (click same = clear)
                     self.hl_periods = set() if self.hl_periods == {p} else {p}
+                self._cycle_anchor = p
                 self.request_render()
             return
         nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None

@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.42** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.43** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1188,6 +1188,10 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.43** — **Cycle highlight: Shift = range select (matches the name column).** Shift+click on
+  a period header now selects the whole contiguous range from the last-clicked column (tracked as
+  `_cycle_anchor`), Ctrl+click adds/removes a single column, and a plain click is single — the same
+  Shift=range / Ctrl=toggle convention the signal name column already uses. Test updated.
 - **v1.42** — **Gesture-mode & cycle-highlight fixes (from real use of v1.41).** (1) Cycle
   highlight: plain header click now lights up *only* that column (click again clears);
   Shift/Ctrl+click adds columns (point multi-select, no drag) — previously every plain click was

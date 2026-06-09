@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.40**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.41**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -71,6 +71,14 @@ runs on first launch (reopen via *Help → Interactive tutorial*).
 - For a `BUS`, click the cell again to type/edit its value; brushing over existing
   BUS cells keeps their values. Edges and transitions are joined automatically for a
   clean, consistent look.
+
+**Read-along & experimental input**
+- **Cycle highlight** — click a period header (`T0`, `T1`, …) to light up that whole
+  column across every signal (click again to clear; multiple columns allowed). Pure
+  reading aid, not saved to the file.
+- **Gesture mode** (experimental; *Help → Experimental*) — tap a cell to select it,
+  then pick an element from a small floating palette of icons; long-press or drag
+  pans the canvas. Off by default; the normal toolbar workflow is unchanged.
 
 **Select & fill**
 - Hold **Shift or Ctrl and drag** on the canvas to box-select a rectangle, then press

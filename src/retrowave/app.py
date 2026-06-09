@@ -52,6 +52,11 @@ class App(tk.Tk):
         self._marquee = None; self._selecting = False; self._panning = False
         self._pan_anchor = None
         self._render_job = None                 # pending coalesced redraw (after_idle id)
+        self.hl_periods = set()                 # cycle columns highlighted (view-only, not saved)
+        self._gesture_mode = bool(usersettings.get_value("experimental_gesture", False))
+        self._palette = None                    # floating element palette (gesture mode)
+        self._g_press = None                    # gesture pending-press state
+        self._g_longpress_job = None
         self._drag_value = None; self._hover = None
         self._hover_node = None; self._hover_edge = None
         self._connecting = False; self._connect_from = None; self._connect_xy = None
@@ -160,6 +165,13 @@ class App(tk.Tk):
             mark = "* " if get_language() == code else "  "
             lang_menu.add_command(label=mark + label, command=lambda c=code: self._set_language(c))
         hm.add_cascade(label=tr("Language"), menu=lang_menu)
+        exp_menu = tk.Menu(hm, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
+        self._exp_gesture_var = tk.BooleanVar(master=self, value=self._gesture_mode)
+        exp_menu.add_checkbutton(
+            label=tr("Gesture mode (select cell, then pick element)"),
+            variable=self._exp_gesture_var,
+            command=lambda: self._set_gesture_mode(self._exp_gesture_var.get()))
+        hm.add_cascade(label=tr("Experimental"), menu=exp_menu)
         hm.add_separator()
         hm.add_command(label=tr("About RetroWave"), command=self.help_about)
         hmb.configure(menu=hm); hmb.pack(side=tk.LEFT)
@@ -397,6 +409,95 @@ class App(tk.Tk):
         self.wave_cv.configure(cursor="fleur")
         self.request_render()
 
+    # ---- experimental: gesture mode (select-then-pick) ----
+    def _set_gesture_mode(self, on):
+        """Toggle the experimental gesture mode; persisted, applied live."""
+        self._gesture_mode = bool(on)
+        usersettings.set_value("experimental_gesture", self._gesture_mode)
+        self._close_palette()
+        self.wave_cv.configure(cursor="hand2" if self._gesture_mode else "")
+        self.status.configure(
+            text=(tr(" Gesture mode ON: tap a cell to pick an element; long-press = pan")
+                  if self._gesture_mode else tr(" Gesture mode off")))
+        self.request_render()
+
+    def _cancel_longpress(self):
+        if self._g_longpress_job is not None:
+            try:
+                self.after_cancel(self._g_longpress_job)
+            except Exception:
+                pass
+            self._g_longpress_job = None
+
+    def _gesture_longpress(self):
+        """Long-press with no movement -> enter pan (drag to pan the canvas)."""
+        self._g_longpress_job = None
+        if self._g_press is not None:
+            self._g_press = None
+            self._panning = True                  # _pan_anchor was set at press
+            self.wave_cv.configure(cursor="fleur")
+
+    def _close_palette(self):
+        if self._palette is not None:
+            try:
+                self._palette.destroy()
+            except Exception:
+                pass
+            self._palette = None
+
+    def _palette_icon(self, parent, kind):
+        """A 28x20 mini-waveform icon for the floating gesture palette."""
+        c = tk.Canvas(parent, width=30, height=22, bg=Style.CANVAS_BG,
+                      highlightthickness=1, highlightbackground=Style.FACE_DARK, cursor="hand2")
+        x0, x1, hi, mid, lo = 3, 27, 4, 11, 18
+        col = Style.WAVE
+        if kind == "CLK":
+            c.create_line(x0, lo, 8, lo, 8, hi, 15, hi, 15, lo, 22, lo, 22, hi, x1, hi, fill=col)
+        elif kind == "H":
+            c.create_line(x0, hi, x1, hi, fill=col, width=2)
+        elif kind == "L":
+            c.create_line(x0, lo, x1, lo, fill=col, width=2)
+        elif kind == "HiZ":
+            c.create_line(x0, mid, x1, mid, fill=col)
+        elif kind == "BUS":
+            c.create_polygon(x0, mid, x0 + 4, hi, x1 - 4, hi, x1, mid, x1 - 4, lo, x0 + 4, lo,
+                             outline=Style.MARQUEE, fill="")
+        elif kind == "Unknown":
+            c.create_rectangle(x0, hi, x1, lo, outline=Style.UNK_HATCH, fill=Style.UNK_FILL)
+            c.create_line(x0, lo, x1, hi, fill=Style.UNK_HATCH)
+        elif kind == "__del__":
+            c.create_line(x0 + 4, hi, x1 - 4, lo, fill="#CC2222", width=2)
+            c.create_line(x0 + 4, lo, x1 - 4, hi, fill="#CC2222", width=2)
+        c.bind("<Button-1>", lambda e, k=kind: self._apply_gesture_element(k))
+        return c
+
+    def _show_gesture_palette(self, x_root, y_root):
+        """Floating palette of element icons near the cursor; applies to cell_sel."""
+        self._close_palette()
+        if self.cell_sel is None:
+            return
+        pal = tk.Toplevel(self)
+        pal.overrideredirect(True)
+        pal.attributes("-topmost", True)
+        frame = tk.Frame(pal, bg=Style.FACE, bd=2, relief=tk.RAISED)
+        frame.pack()
+        for kind in (*WAVE_TYPES, "__del__"):
+            self._palette_icon(frame, kind).pack(side=tk.LEFT, padx=1, pady=1)
+        pal.geometry(f"+{x_root + 8}+{y_root + 12}")
+        pal.bind("<Escape>", lambda e: self._close_palette())
+        self._palette = pal
+
+    def _apply_gesture_element(self, kind):
+        """Apply the chosen element (or clear) to the current selection, then close."""
+        sel = self.cell_sel
+        self._close_palette()
+        if sel is None:
+            return
+        msg = self._fill_rect(sel, "L" if kind == "__del__" else kind)
+        if msg:
+            self.request_render()
+            self.status.configure(text=" " + msg)
+
     def _refresh_tools(self):
         for k, b in self.tool_btns.items():
             on = (k == self.active_tool)
@@ -461,7 +562,8 @@ class App(tk.Tk):
         if self._render_job is not None:        # synchronous redraw -> cancel a pending coalesced request
             self.after_cancel(self._render_job); self._render_job = None
         self.name_cv.configure(width=self.geom.name_w)
-        self.engine.draw(self.name_cv, self.wave_cv, self.model, self.sig_sel, self.geom, self.cell_sel)
+        self.engine.draw(self.name_cv, self.wave_cv, self.model, self.sig_sel, self.geom,
+                          self.cell_sel, highlight_periods=self.hl_periods)
         # when content shrinks back within the window (deleting rows / collapsing groups, etc.), pull that axis back to origin and keep the name column in sync
         h_ok, v_ok = self._scrollable()
         if not v_ok:
@@ -587,12 +689,32 @@ class App(tk.Tk):
         cx, cy = self._ev_xy(e)
         self._press_xy = (cx, cy)
         ctrl = bool(e.state & CTRL_MASK); shift = bool(e.state & SHIFT_MASK)
+        if cy < self.geom.header_h:               # click the period header -> toggle cycle column highlight
+            p = int(cx // self.geom.period_w)
+            if 0 <= p < self.model.n_periods:
+                self.hl_periods ^= {p}
+                self.request_render()
+            return
         nid = self._node_at_xy(cx, cy) if not (ctrl or shift) else None
         if nid:                                   # drag a line from an anchor (enter frozen state); works in both draw and pan mode
             self._connecting = True; self._connect_from = nid
             self._connect_xy = (cx, cy); self._press = None
             self._selecting = False; self._moved = False
             self.request_render(); return
+        if self._gesture_mode:                     # experimental: select-then-pick gesture flow
+            self._close_palette()
+            if ctrl or shift:                      # Shift/Ctrl = box-select (palette on release)
+                self._press = self._cell_from_xy(cx, cy); self._moved = False
+                self._selecting = True; self._erase_marquee()
+                if self.cell_sel is not None:
+                    self.cell_sel = None; self.request_render()
+            else:                                  # plain: tap=select+palette, move/hold=pan
+                self._press = None; self._selecting = False; self._moved = False
+                self._g_press = (cx, cy, self._cell_from_xy(cx, cy))
+                self._pan_anchor = (e.x, e.y, self.wave_cv.xview()[0], self.wave_cv.yview()[0])
+                self._cancel_longpress()
+                self._g_longpress_job = self.after(350, self._gesture_longpress)
+            return
         if self.active_tool is None and not (ctrl or shift):   # pan mode: left button = pan canvas
             self._panning = True
             self._pan_anchor = (e.x, e.y, self.wave_cv.xview()[0], self.wave_cv.yview()[0])
@@ -633,6 +755,13 @@ class App(tk.Tk):
             self.wave_cv.yview_moveto(fy + (ay - e.y) / sh if v_ok else 0.0)
             self.name_cv.yview_moveto(self.wave_cv.yview()[0])   # sync the name column using the actual clamped value
             return
+        if self._g_press is not None:              # gesture pending: movement promotes to pan
+            gx, gy, _ = self._g_press
+            if abs(e.x - self._pan_anchor[0]) > 4 or abs(e.y - self._pan_anchor[1]) > 4:
+                self._cancel_longpress()
+                self._pan_anchor = (e.x, e.y, self.wave_cv.xview()[0], self.wave_cv.yview()[0])
+                self._panning = True; self._g_press = None
+            return
         cx, cy = self._ev_xy(e)
         if self._connecting:
             self._connect_xy = (cx, cy)
@@ -655,6 +784,18 @@ class App(tk.Tk):
     def on_release(self, e):
         if self._panning:
             self._panning = False; self._pan_anchor = None
+            self._cancel_longpress(); self._g_press = None
+            return
+        if self._g_press is not None:              # gesture tap (no move / no long-press) -> select + palette
+            self._cancel_longpress()
+            _gx, _gy, cell = self._g_press; self._g_press = None
+            if cell:
+                self.selected = cell[0]
+                self.cell_sel = (cell[0], cell[0], cell[1], cell[1]); self._copy_ctx = "cells"
+                self.request_render()
+                self._show_gesture_palette(e.x_root, e.y_root)
+            else:
+                self.cell_sel = None; self.request_render()
             return
         cx, cy = self._ev_xy(e)
         if self._connecting:
@@ -676,7 +817,10 @@ class App(tk.Tk):
                 self._copy_ctx = "cells"
             self._erase_marquee(); self.request_render()
             if self.cell_sel:
-                self.status.configure(text=tr(" Box-selected; press an element key to fill, or Ctrl+C to copy"))
+                if self._gesture_mode:             # gesture box-select -> palette over the block
+                    self._show_gesture_palette(e.x_root, e.y_root)
+                else:
+                    self.status.configure(text=tr(" Box-selected; press an element key to fill, or Ctrl+C to copy"))
         else:
             if not self._moved and self._press:
                 self._click_cell(*self._press)

@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.40** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.41** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1188,6 +1188,18 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.41** — **Cycle-column highlight + experimental gesture mode.** (1) Clicking a period header
+  (`T0`/`T1`/…) toggles a full-height light-blue highlight over that whole cycle column across all
+  signals — view-only emphasis for reading alignment, multiple columns allowed, **not** persisted
+  to the project file. `Engine.draw` gained a `highlight_periods` parameter (drawn first, behind
+  everything; export passes none). (2) A new **Help → Experimental** submenu hosts checkbox toggles
+  persisted in `usersettings`. The first is **gesture mode** (default off): when on, a plain tap on
+  a cell selects it and pops a floating palette of mini-waveform element icons (+ delete) near the
+  cursor — the user picks the element instead of pre-selecting a tool; Shift/Ctrl+drag box-selects
+  then pops the palette over the block; a long-press (no movement) or a drag enters canvas pan. The
+  normal draw/pan interaction is unchanged when the toggle is off. Guards:
+  `tests/test_ui_features.py` (header-toggle, view-only, palette apply/delete, long-press→pan,
+  drag→pan-not-paint, toggle persistence).
 - **v1.40** — **Wider WaveDrom import support + less-cramped export + an MCP `help` tool.**
   *Import:* the full WaveDrom wave vocabulary now parses, not just our own export — the colored
   data boxes `2`–`9` (as well as `=`) all become BUS and each consumes the next `data[]` entry

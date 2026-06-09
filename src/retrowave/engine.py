@@ -33,7 +33,8 @@ class Engine:
                     and a["type"] in ("BUS", "Unknown")
                     and a.get("text", "") == b.get("text", ""))
 
-    def draw(self, name_cv, wave_cv, model, sig_sel, geom, cell_sel=None):
+    def draw(self, name_cv, wave_cv, model, sig_sel, geom, cell_sel=None,
+             highlight_periods=None):
         name_cv.delete("all"); wave_cv.delete("all")
         n = len(model.signals); npd = model.n_periods
         HH, RH, PW, NW = geom.header_h, geom.row_h, geom.period_w, geom.name_w
@@ -42,6 +43,14 @@ class Engine:
         max_off = max((s.get("offset", 0.0) for s in model.signals), default=0.0)
         wave_cv.configure(scrollregion=(0, 0, max(grid_w + max_off * PW, 10), max(total_h, 10)))
         name_cv.configure(scrollregion=(0, 0, NW, max(total_h, 10)))
+
+        # full-height cycle highlight (drawn first, behind everything) — view-only emphasis
+        for p in (highlight_periods or ()):
+            if 0 <= p < npd:
+                wave_cv.create_rectangle(p * PW, HH, (p + 1) * PW, total_h,
+                                         fill=Style.CYCLE_HL, outline="")
+                wave_cv.create_rectangle(p * PW, 0, (p + 1) * PW, HH,
+                                         fill=Style.CYCLE_HL, outline="")
 
         name_cv.create_rectangle(0, 0, NW, HH, fill=Style.FACE, outline=Style.FACE_DARK)
         name_cv.create_text(NW // 2, HH // 2, text="SIGNAL", font=Style.UI_FONT, fill=Style.TEXT)

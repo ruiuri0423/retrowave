@@ -7,6 +7,11 @@ resource, the one sanctioned exception to the English-only source rule.
 TRANSLATIONS = {
     # ---- mandatory seed entries (keep) ----
     "Language": "語言",
+    "Experimental": "實驗功能",
+    "Gesture mode (select cell, then pick element)": "手勢模式（先選格，再選元件）",
+    " Gesture mode ON: tap a cell to pick an element; long-press = pan":
+        " 手勢模式開啟：點一格挑選元件；長按=平移畫布",
+    " Gesture mode off": " 手勢模式關閉",
     "Interactive tutorial": "互動教學",
     "Language preference saved. Restart RetroWave to apply.":
         "語言偏好已儲存，重新啟動 RetroWave 後生效。",

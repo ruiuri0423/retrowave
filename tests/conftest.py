@@ -15,9 +15,11 @@ import retrowave  # noqa: E402
 class Ev:
     """Fake tkinter event (only carries fields the handlers use)."""
 
-    def __init__(self, x=0, y=0, state=0, delta=0, num=0):
+    def __init__(self, x=0, y=0, state=0, delta=0, num=0, x_root=None, y_root=None):
         self.x, self.y, self.state = x, y, state
         self.delta, self.num = delta, num
+        self.x_root = x if x_root is None else x_root   # screen coords (palette positioning)
+        self.y_root = y if y_root is None else y_root
 
 
 def assert_invariants(m):
@@ -113,6 +115,9 @@ def app(_root):
     a._erase_marquee(); a._selecting = False; a._panning = False; a._pan_anchor = None
     a._drag_value = None; a._hover = None; a._hover_node = None; a._hover_edge = None
     a._connecting = False; a._connect_from = None; a._connect_xy = None
+    a.hl_periods = set()                       # cycle highlights
+    a._cancel_longpress(); a._close_palette()  # gesture-mode transients
+    a._gesture_mode = False; a._g_press = None
     a.wave_cv.xview_moveto(0.0); a.wave_cv.yview_moveto(0.0); a.name_cv.yview_moveto(0.0)
     a._set_tool("H")
     a.render()

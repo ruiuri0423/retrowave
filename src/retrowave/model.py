@@ -182,11 +182,11 @@ class Model:
         index = max(0, min(len(cont), index))
         marker = {"type": "_marker"}
         cont.insert(index, marker)
-        nodes = [n for n in (self._detach_sid(s) for s in sids) if n is not None]
-        if not nodes:
+        leaves = [n for n in (self._detach_sid(s) for s in sids) if n is not None]
+        if not leaves:
             cont.remove(marker); self._after_tree_change(); return False
         at = cont.index(marker)
-        cont[at:at + 1] = nodes                  # replace the marker with the block
+        cont[at:at + 1] = leaves                 # replace the marker with the block
         self._after_tree_change()
         return True
 

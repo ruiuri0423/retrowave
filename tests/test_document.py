@@ -58,7 +58,7 @@ def test_invalid_returns_false_no_event_no_undo(doc, events):
     assert doc.set_offset([], 0.5) == 0
     assert doc.delete_group("no_such") == 0
     assert doc.toggle_group("no_such") is None
-    assert doc.move_leaf_to(999, None, 0) is False    # non-existent sid
+    assert doc.move_leaves_to({999}, 0) is False      # non-existent sid (single = one-element set)
     assert events == [] and not doc.can_undo()        # failures emit no event and don't enter undo
     assert_invariants(doc.model)
 
@@ -69,7 +69,7 @@ def test_move_group_into_descendant_refused_atomic(doc, events):
     doc.merge_groups(g2, g1)
     snap = doc.model.to_dict()
     events.clear()
-    assert doc.move_group_to(g1, g2, 0) is False      # user-level invalid
+    assert doc.move_group_to(g1, 0, container_gid=g2) is False   # user-level invalid
     assert doc.model.to_dict() == snap                # document unchanged (atomic)
     assert events == []
     assert_invariants(doc.model)

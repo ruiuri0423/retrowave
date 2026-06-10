@@ -1079,20 +1079,23 @@ class App(tk.Tk):
                     where = (tr(" (merged into group)") if tgt["container"]
                              else tr(" (moved to top level)"))
                     if len(sel_sids) > 1 and drag_sid in sel_sids:   # multi-select drag = move the block
-                        self.doc.move_leaves_to(sel_sids, tgt["container"], tgt["index"])
+                        self.doc.move_leaves_to(sel_sids, tgt["index"],
+                                                container_gid=tgt["container"])
                         self.sig_sel = {i for i, s in enumerate(self.model.signals)
                                         if s["sid"] in sel_sids}
                         self.status.configure(
                             text=tr(" Moved {n} signals").format(n=len(self.sig_sel)) + where)
                     else:                                            # single signal
-                        self.doc.move_leaf_to(drag_sid, tgt["container"], tgt["index"])
+                        self.doc.move_leaves_to({drag_sid}, tgt["index"],
+                                                container_gid=tgt["container"])
                         self.sig_sel = {i for i, s in enumerate(self.model.signals)
                                         if s["sid"] == drag_sid}
                         self.status.configure(text=tr(" Moved signal") + where)
                     self.selected = next(iter(self.sig_sel), self.selected)
                     self._sig_anchor = self.selected
                 else:
-                    self.doc.move_group_to(self._drag_ref, tgt["container"], tgt["index"])
+                    self.doc.move_group_to(self._drag_ref, tgt["index"],
+                                           container_gid=tgt["container"])
                     self.status.configure(text=tr(" Moved group") +
                                           (tr(" (nested as a subgroup)") if tgt["container"] else tr(" (top level)")))
             self._dragging = False; self._drop = None; self._drop_target = None

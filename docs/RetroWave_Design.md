@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.47** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.48** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1109,7 +1109,7 @@ Identity is always by stable handle (`sid`/`gid`/`nid`), never by row index (§2
 | `set_periods` | n | pads/truncates cells |
 | `create_group` | sids[], name? | →gid |
 | `merge_into_group` / `merge_groups` | sids[]/gid, target gid | nest guard §2.6 |
-| `move_leaf` / `move_group` | sid/gid, container gid?, index | marker method (§8.3) |
+| `move_leaves` / `move_group` | sids[]/gid, index, container gid? | marker method (§8.3); one signal = a one-element set; container omitted/None = top level |
 | `remove_from_group` / `dissolve_group` / `delete_group` | sids[] / gid / gid | |
 | `set_group_color` / `rename_group` / `toggle_collapsed` | gid, value? | |
 | `paste_cells` | at (sid, period), block | auto-adds signals |
@@ -1203,6 +1203,16 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.48** — **Model/Document move API consolidated to plural-only, unified signatures.**
+  `move_leaf_to` is removed at both layers — `move_leaves_to({sid}, …)` covers the single-signal
+  case (same marker method, and the rule-4 downward off-by-one regression coverage now runs
+  through it). The whole move family is unified to `(target, index, container_gid=None)` —
+  `container_gid` is now optional (None = top level) and **keyword-passed at every call site**, so
+  a future parameter reorder fails loudly instead of silently swapping positional args (the trap
+  this refactor itself exposed: reordering Model alone left Document passing
+  `(sid, container_gid, index)` positionally — wrong but exception-free). `move_group_to` follows
+  the same order for family consistency. No user-visible behavior change; §14.3 catalog row
+  updated to `move_leaves`. Mirrors the v1.47 plural-only MCP principle at the core layers.
 - **v1.47** — **MCP tool slimming: plural-only write commands.** `add_signals([{name?, fill?}])`
   joins `set_cells` as a batch command (atomic validation, one undo step, returns the new
   `{index, name}` pairs), and the singular tools `add_signal` / `set_cell` are removed from the

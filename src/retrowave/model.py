@@ -165,26 +165,13 @@ class Model:
             return False
         return self._find_group_node(other, node.get("children", [])) is not None
 
-    def move_leaf_to(self, sid, container_gid, index):
-        """Move a signal leaf to the given position in the target container's children (None=top level). A marker auto-corrects index shifts."""
-        cont = self._container_children(container_gid)
-        if cont is None:
-            return False
-        index = max(0, min(len(cont), index))
-        marker = {"type": "_marker"}
-        cont.insert(index, marker)
-        node = self._detach_sid(sid)
-        if node is None:
-            cont.remove(marker); self._after_tree_change(); return False
-        cont[cont.index(marker)] = node
-        self._after_tree_change()
-        return True
-
-    def move_leaves_to(self, sids, container_gid, index):
-        """Move several signal leaves into the target container at index, as one
-        contiguous block preserving their current DFS leaf order. Marker method:
-        one placeholder is inserted, every sid detached, then the marker is
-        replaced by the whole block (so indices auto-correct, same as move_leaf_to)."""
+    def move_leaves_to(self, sids, index, container_gid=None):
+        """Move one or several signal leaves into the target container at index
+        (container None = top level; a single signal is a one-element set), as
+        one contiguous block preserving their current DFS leaf order. Marker
+        method: one placeholder is inserted, every sid detached, then the
+        marker is replaced by the whole block — so indices auto-correct and a
+        downward move within the same container lands without an off-by-one."""
         order = {nd["sid"]: k for k, nd in enumerate(self._dfs_leaves())}
         sids = sorted({s for s in sids if s in order}, key=lambda s: order[s])
         if not sids:
@@ -203,8 +190,8 @@ class Model:
         self._after_tree_change()
         return True
 
-    def move_group_to(self, gid, container_gid, index):
-        """Move a group to the given position in the target container (nested if the container is a group). Guard: cannot move into itself or its descendants."""
+    def move_group_to(self, gid, index, container_gid=None):
+        """Move a group to the given position in the target container (None=top level, nested if a group). Guard: cannot move into itself or its descendants."""
         if self._find_group_node(gid) is None:
             return False
         if container_gid is not None and self._is_self_or_descendant(gid, container_gid):

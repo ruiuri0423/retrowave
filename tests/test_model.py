@@ -123,8 +123,8 @@ def test_move_group_into_own_descendant_refused(model, check):
     g1 = model.group_signals([0], name="A")
     g2 = model.group_signals([2], name="B")
     model.merge_groups(g2, g1)
-    assert model.move_group_to(g1, g2, 0) is False
-    assert model.move_group_to(g1, g1, 0) is False
+    assert model.move_group_to(g1, 0, container_gid=g2) is False
+    assert model.move_group_to(g1, 0, container_gid=g1) is False
     check(model)
 
 
@@ -132,7 +132,7 @@ def test_move_leaf_downward_same_container_no_off_by_one(model, check):
     """Regression test for rule 4: downward moves use the marker method; the landing spot must not shift."""
     model.add_signal("S3"); model.add_signal("S4")   # CLK RST DATA S3 S4
     sid = model.signals[0]["sid"]                    # move CLK to index 3 (after S3)
-    assert model.move_leaf_to(sid, None, 4)          # target: before original S4 (index=4 when the tree still contains self)
+    assert model.move_leaves_to({sid}, 4)            # target: before original S4 (index=4 when the tree still contains self)
     assert [s["name"] for s in model.signals] == ["RST_N", "DATA", "S3", "CLK", "S4"]
     check(model)
 
@@ -142,7 +142,7 @@ def test_move_leaves_to_block_preserves_order(model, check):
     (not by the order of the passed-in set)."""
     model.add_signal("S3"); model.add_signal("S4")   # CLK RST DATA S3 S4
     sids = {model.signals[0]["sid"], model.signals[2]["sid"]}  # CLK, DATA (unordered set)
-    assert model.move_leaves_to(sids, None, 5)        # move to the tail
+    assert model.move_leaves_to(sids, 5)              # move to the tail (top level)
     names = [s["name"] for s in model.signals]
     assert names == ["RST_N", "S3", "S4", "CLK", "DATA"]   # block keeps CLK->DATA leaf order
     check(model)
@@ -152,7 +152,7 @@ def test_move_leaves_into_group(model, check):
     gid = model.group_signals([0], name="G")          # G(CLK), RST_N, DATA
     sids = {model.signals[i]["sid"] for i in range(len(model.signals))
             if model.signals[i]["name"] in ("RST_N", "DATA")}
-    assert model.move_leaves_to(sids, gid, 1)
+    assert model.move_leaves_to(sids, 1, container_gid=gid)
     node = model._find_group_node(gid)
     assert [model.signals[[s["sid"] for s in model.signals].index(c["sid"])]["name"]
             for c in node["children"]] == ["CLK", "RST_N", "DATA"]
@@ -160,24 +160,24 @@ def test_move_leaves_into_group(model, check):
 
 
 def test_move_leaves_empty_or_bad(model, check):
-    assert model.move_leaves_to(set(), None, 0) is False
-    assert model.move_leaves_to({999}, None, 0) is False
-    assert model.move_leaves_to({model.signals[0]["sid"]}, "no_gid", 0) is False
+    assert model.move_leaves_to(set(), 0) is False
+    assert model.move_leaves_to({999}, 0) is False
+    assert model.move_leaves_to({model.signals[0]["sid"]}, 0, container_gid="no_gid") is False
     check(model)
 
 
 def test_move_leaf_into_group_at_position(model, check):
     gid = model.group_signals([1, 2], name="G")
     sid = model.signals[0]["sid"]                    # CLK
-    assert model.move_leaf_to(sid, gid, 1)           # insert in the middle of the group's children
+    assert model.move_leaves_to({sid}, 1, container_gid=gid)   # insert mid-group (single = one-element set)
     node = model._find_group_node(gid)
     assert [c["sid"] for c in node["children"]][1] == sid
     assert model.signals[[s["sid"] for s in model.signals].index(sid)]["group"] == gid
     check(model)
 
 
-def test_move_leaf_to_bad_container(model, check):
-    assert model.move_leaf_to(model.signals[0]["sid"], "no_such_gid", 0) is False
+def test_move_leaves_to_bad_container(model, check):
+    assert model.move_leaves_to({model.signals[0]["sid"]}, 0, container_gid="no_such_gid") is False
     check(model)
 
 

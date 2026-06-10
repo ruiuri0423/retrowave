@@ -1,15 +1,24 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["mcp", "pillow"]
+# ///
 # -*- coding: utf-8 -*-
 """Launch the RetroWave MCP server (stdio) for plugging into AI sessions.
 
 The run-layer counterpart of run.py: run.py starts the GUI, run_mcp.py starts
 the MCP server. It resolves src/ onto sys.path itself, so an MCP client can point
-straight at this file with no PYTHONPATH wiring:
+straight at this file with no PYTHONPATH wiring.
 
-    {"mcpServers": {"retrowave": {"command": "python",
-                                  "args": ["/abs/path/to/run_mcp.py"]}}}
+Recommended launcher: **uv** (a single standalone binary, no Python needed to
+install it). The PEP 723 block above lets `uv run run_mcp.py` build an isolated
+environment — auto-downloading a Python 3.10+ if needed and installing `mcp` +
+`pillow` on first run — so the only thing a user installs is uv itself:
 
-Requires `pip install mcp` (and `pillow` for PNG rendering). All diagnostics go to
-stderr — stdout is reserved for the MCP protocol.
+    {"mcpServers": {"retrowave": {"command": "uv",
+                                  "args": ["run", "/abs/path/to/run_mcp.py"]}}}
+
+(`mcp` needs Python 3.10+; `pillow` is for PNG rendering — SVG needs neither.)
+All diagnostics go to stderr — stdout is reserved for the MCP protocol.
 """
 import os
 import sys

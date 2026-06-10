@@ -2,21 +2,21 @@
   "manifest_version": "0.2",
   "name": "retrowave",
   "display_name": "RetroWave",
-  "version": "1.44",
+  "version": "1.45",
   "description": "Drive the RetroWave waveform editor from your AI session by MCP command injection — build digital timing diagrams step by step and render them.",
   "author": { "name": "Ricky (ruiuri0423)" },
   "homepage": "https://github.com/ruiuri0423/retrowave",
   "license": "MIT",
   "keywords": ["waveform", "timing-diagram", "wavedrom", "digital", "mcp"],
   "server": {
-    "type": "python",
+    "type": "binary",
     "entry_point": "run_mcp.py",
     "mcp_config": {
-      "command": "python",
-      "args": ["${__dirname}/run_mcp.py"]
+      "command": "uv",
+      "args": ["run", "${__dirname}/run_mcp.py"]
     }
   },
   "compatibility": {
-    "runtimes": { "python": ">=3.8" }
+    "runtimes": { "python": ">=3.10" }
   }
 }

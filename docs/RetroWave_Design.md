@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.44** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.45** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1175,6 +1175,13 @@ render an image.
   with `mcpServers` using `${CLAUDE_PLUGIN_ROOT}`, plus a `marketplace.json` so the repo is its own
   marketplace), a **Claude Desktop bundle** (root `manifest.json`, `${__dirname}`, packed with
   `mcpb pack` into a `.mcpb`), and a **manual `.mcp.json`** fallback.
+- **Launcher: `uv` (v1.45).** `run_mcp.py` carries an inline PEP 723 block
+  (`requires-python = ">=3.10"`, `dependencies = ["mcp", "pillow"]`); all three install paths invoke
+  `uv run run_mcp.py`, so uv auto-provisions a Python 3.10+ and the deps on first run. The user
+  installs only the single `uv` binary — this removes the prior friction where a wrong Python
+  version (the `mcp` SDK needs 3.10+, while the GUI runs on 3.8+) or a missing `pip install` would
+  make the server fail to start. The PEP 723 block is an inert comment under a plain `python`
+  interpreter, so a manual `python run_mcp.py` (with deps pre-installed) still works.
 
 **Implementation (v1.35).** `mcp_server.py` splits in two: `WaveSession` (holds one `Document`,
 exposes the command catalog + `render`/`get_document`/`open_document`/`import_wavedrom`/`undo` as
@@ -1194,6 +1201,15 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.45** — **uv-based zero-install MCP launch.** `run_mcp.py` gains an inline PEP 723 block
+  (`requires-python = ">=3.10"`, `dependencies = ["mcp", "pillow"]`) and all three install paths
+  (Claude Code plugin, `.mcpb` manifest, manual `.mcp.json`) now launch via `uv run run_mcp.py`
+  instead of `python`. uv (a single standalone binary) auto-downloads a satisfying Python 3.10+ and
+  installs the deps on first run, so the user installs only uv — fixing the prior trap where the
+  `mcp` SDK's 3.10+ requirement (vs. the GUI's 3.8+) or a missing `pip install` broke startup. The
+  PEP 723 block stays inert under a plain `python` run, so manual launching still works. README's
+  install section reorganized so the human-driven (UI) and AI-driven (MCP) paths sit together under
+  one **Getting started** section.
 - **v1.44** — **MCP install paths + optional inline `render`.** (1) Ship three ways to install the
   MCP server, all wrapping the same stdio `run_mcp.py`: a **Claude Code plugin**
   (`.claude-plugin/plugin.json` + `marketplace.json`, install via `/plugin marketplace add

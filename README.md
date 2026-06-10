@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.44**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.45**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -30,6 +30,11 @@ templates, and export to PNG, SVG or EPS.
 ---
 
 ## Getting started
+
+RetroWave can be used **two ways** — as a desktop app you draw in yourself, or
+driven by an LLM in your AI session. Both share the exact same engine; pick either.
+
+### A · Desktop app — human-driven (UI)
 
 ```bash
 python run.py            # or: cd src && python -m retrowave
@@ -54,6 +59,55 @@ page (built automatically from each `v*` tag — tests run first, PNG export inc
 
 The window opens with a small demo waveform so you can start experimenting
 immediately — and a short interactive tutorial on first launch.
+
+### B · AI / MCP — AI-driven (experimental)
+
+Let an LLM in your AI session (Claude Code, Claude Desktop, …) **drive RetroWave by
+command injection** — it builds a diagram step by step (`add_signal`, `fill`,
+`create_group`, `add_anchor`, …) then `render`s it. The model authors *only* through
+commands; it never hand-writes the document JSON (`open_document` / `import_wavedrom`
+only load existing saved files). All paths launch the same stdio server, `run_mcp.py`.
+
+> **Only prerequisite: [uv](https://docs.astral.sh/uv/)** — a single standalone binary
+> (installing uv needs no pre-existing Python). The server's launch command is
+> `uv run run_mcp.py`; thanks to an inline [PEP 723](https://peps.python.org/pep-0723/)
+> block, uv builds an isolated environment on first run — **auto-downloading a Python
+> 3.10+ if needed and installing `mcp` + `pillow` for you**. Nothing else to install.
+
+**Install — pick one:**
+
+1. **Claude Code — plugin marketplace** (recommended for Claude Code):
+   ```text
+   /plugin marketplace add ruiuri0423/retrowave
+   /plugin install retrowave@ruiuri0423-retrowave
+   ```
+   `.claude-plugin/plugin.json` wires the server with `${CLAUDE_PLUGIN_ROOT}`, so it
+   works wherever the plugin is checked out — no paths to edit.
+
+2. **Claude Desktop — `.mcpb` bundle** (drag-and-drop):
+   ```bash
+   npm install -g @anthropic-ai/mcpb     # one-time
+   mcpb pack                             # manifest.json + repo -> retrowave.mcpb
+   ```
+   Then drag `retrowave.mcpb` into **Settings → Extensions** and confirm. The bundle
+   uses `${__dirname}`, so it's relocatable.
+
+3. **Manual `.mcp.json`** (any MCP client / fallback) — register `run_mcp.py` with its
+   **absolute** path:
+   ```json
+   {
+     "mcpServers": {
+       "retrowave": { "command": "uv", "args": ["run", "/absolute/path/to/run_mcp.py"] }
+     }
+   }
+   ```
+
+**Use:** ask the model to draw a timing diagram. It reads the bundled
+`waveform://schema|commands|guide` resources (or calls the `help` tool), builds the
+waveform through commands, then calls `render` — which by default writes a PNG/SVG file
+and returns its **path** (engineers usually want the saved artifact); pass
+`render(inline=True)` to get the image **inline in the session** instead. The command
+logic is covered by `tests/test_mcp_session.py`.
 
 ---
 
@@ -211,80 +265,6 @@ A signal is a single source-of-truth object; a *group* is just a label
 never duplicated.
 
 ---
-
-## AI / MCP plugin (experimental)
-
-There are **two ways to use RetroWave**:
-
-- **Human-driven (GUI):** run the app and draw with the mouse/keyboard — see
-  [Getting started](#getting-started) above.
-- **AI-driven (MCP):** let an LLM in your AI session (Claude Code, Claude Desktop, …)
-  **drive RetroWave by command injection** — it builds a diagram step by step
-  (`add_signal`, `fill`, `create_group`, `add_anchor`, …), then `render`s it. The model
-  authors *only* through commands; it never hand-writes the document JSON.
-  `open_document` / `import_wavedrom` only load existing saved files.
-
-> **Prerequisite for every AI-driven path:** Python 3.8+ on `PATH`, plus
-> `pip install mcp pillow` (`mcp` = the server runtime; `pillow` = PNG rendering — SVG
-> needs neither). All paths launch the same stdio server, `run_mcp.py`.
-
-### Install
-
-**A. Claude Code — plugin marketplace** (recommended for Claude Code)
-
-```text
-/plugin marketplace add ruiuri0423/retrowave
-/plugin install retrowave@ruiuri0423-retrowave
-```
-
-The plugin manifest (`.claude-plugin/plugin.json`) wires the server with
-`${CLAUDE_PLUGIN_ROOT}`, so it works wherever the plugin is checked out — no absolute
-paths to edit.
-
-**B. Claude Desktop — `.mcpb` bundle** (drag-and-drop, lowest friction)
-
-Build a bundle from the repo and install it via **Settings → Extensions**:
-
-```bash
-npm install -g @anthropic-ai/mcpb     # one-time
-mcpb pack                             # packs manifest.json + repo into retrowave.mcpb
-```
-
-Then drag `retrowave.mcpb` onto the Extensions pane. (The bundle uses `${__dirname}`, so
-it's relocatable; you can optionally bundle a Python runtime so end-users need none.)
-
-**C. Manual `.mcp.json`** (any MCP client / fallback)
-
-```bash
-pip install mcp pillow
-python run_mcp.py        # starts the stdio MCP server (Ctrl+C to stop); diagnostics on stderr
-```
-
-`run_mcp.py` is the run-layer for MCP (the counterpart of `run.py`, which starts the
-GUI) — it puts `src/` on the path itself, so a client can point straight at it. Register
-it with the **absolute** path:
-
-```json
-{
-  "mcpServers": {
-    "retrowave": {
-      "command": "python",
-      "args": ["/absolute/path/to/run_mcp.py"]
-    }
-  }
-}
-```
-
-### Use
-
-Once connected, just ask the model to draw a timing diagram. It reads the bundled
-`waveform://schema|commands|guide` resources (or calls the `help` tool), builds the
-waveform through commands, and calls `render` — which by default writes a PNG/SVG file
-and returns its **path** (handy for engineers who want the saved artifact). Ask for
-`render(inline=True)` to instead get the image **inline in the session**.
-
-The command logic is covered by `tests/test_mcp_session.py`; the stdio wiring needs
-`mcp` installed and is best verified by plugging it into a client.
 
 ## Interoperability
 

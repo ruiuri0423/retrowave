@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.45** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.46** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1201,6 +1201,15 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.46** — **MCP `set_cells` batch tool.** A new command tool sets many cells (each with its
+  own type/text) in a single undo step, so a model can paint a whole sequence — e.g. the per-cycle
+  BUS labels of an SPI/I2C frame — in one call instead of one `set_cell` round-trip per cell. Input
+  is a flat list of `{signal, period, type, text?}` objects (stays within strict-structured-output
+  limits); validated atomically — any malformed/out-of-range entry rejects the whole batch with no
+  partial writes and no undo step (the §14 error policy). Registered in `_TOOLS` and advertised in
+  the `waveform://commands` resource with a "prefer for sequences" hint. Tests:
+  `test_set_cells_batch_one_undo`, `test_set_cells_atomic_on_bad_entry`. (Command injection stays
+  the only authoring path — this is a plural command, not a document-blob writer.)
 - **v1.45** — **uv-based zero-install MCP launch.** `run_mcp.py` gains an inline PEP 723 block
   (`requires-python = ">=3.10"`, `dependencies = ["mcp", "pillow"]`) and all three install paths
   (Claude Code plugin, `.mcpb` manifest, manual `.mcp.json`) now launch via `uv run run_mcp.py`

@@ -43,6 +43,40 @@ def test_fill_is_single_undo_step(s):
     assert_invariants(s.model)
 
 
+def test_set_cells_batch_one_undo(s):
+    """Many cells with distinct values land in a single undo step."""
+    s.doc._undo.clear()
+    r = s.set_cells(cells=[
+        {"signal": 0, "period": 0, "type": "BUS", "text": "D0"},
+        {"signal": 0, "period": 1, "type": "BUS", "text": "D1"},
+        {"signal": 1, "period": 0, "type": "H"},
+    ])
+    assert r["ok"] and r["set"] == 3
+    assert s.model.signals[0]["cells"][0]["type"] == "BUS"
+    assert s.model.signals[0]["cells"][0]["text"] == "D0"
+    assert s.model.signals[1]["cells"][0]["type"] == "H"
+    assert s.doc.history()[0] == 1            # exactly one undo unit for the whole batch
+    s.undo()
+    assert s.model.signals[0]["cells"][0]["text"] == ""   # whole batch reverted at once
+    assert_invariants(s.model)
+
+
+def test_set_cells_atomic_on_bad_entry(s):
+    """A malformed entry changes nothing and pushes no undo step."""
+    s.doc._undo.clear()
+    base = s.model.signals[0]["cells"][0]["type"]
+    r = s.set_cells(cells=[
+        {"signal": 0, "period": 0, "type": "BUS", "text": "x"},
+        {"signal": 0, "period": 1, "type": "NOPE"},      # invalid type -> whole batch rejected
+    ])
+    assert r["ok"] is False
+    assert s.model.signals[0]["cells"][0]["type"] == base   # nothing written
+    assert s.doc.history()[0] == 0                          # no undo step
+    # out-of-range index is likewise rejected atomically
+    assert s.set_cells(cells=[{"signal": 99, "period": 0, "type": "H"}])["ok"] is False
+    assert_invariants(s.model)
+
+
 def test_set_periods(s):
     """Regression: set_periods must call Document.set_n_periods (name bug)."""
     r = s.set_periods(8)

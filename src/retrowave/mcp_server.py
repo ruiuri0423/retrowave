@@ -195,6 +195,34 @@ class WaveSession:
         self.doc.commit()
         return _ok(filled=n)
 
+    def set_cells(self, cells: List[dict]):
+        """Set MANY cells at once in ONE undo step — PREFER THIS over repeated
+        set_cell when painting a sequence (e.g. per-cycle BUS labels), it saves
+        round-trips. `cells` is a list of {signal, period, type, text?} objects
+        (`type` ∈ CLK/H/L/BUS/HiZ/Unknown; `text` is the BUS label, default "").
+        Validated atomically: if ANY entry is malformed or out of range nothing
+        is changed and ok=False is returned (no partial writes, no undo step)."""
+        n_sig, n_per = len(self.model.signals), self.model.n_periods
+        norm = []
+        for i, c in enumerate(cells):
+            if not isinstance(c, dict):
+                return _err(f"cell {i}: must be an object with signal/period/type")
+            try:
+                sig, per, typ = int(c["signal"]), int(c["period"]), c["type"]
+            except (KeyError, TypeError, ValueError):
+                return _err(f"cell {i}: needs signal, period, type")
+            if typ not in WAVE_TYPES:
+                return _err(f"cell {i}: type must be one of {WAVE_TYPES}")
+            if not (0 <= sig < n_sig):
+                return _err(f"cell {i}: signal index out of range")
+            if not (0 <= per < n_per):
+                return _err(f"cell {i}: period out of range")
+            norm.append((sig, per, typ, c.get("text", "")))
+        self.doc.begin()
+        n = sum(1 for sig, per, typ, txt in norm if self.doc.set_cell(sig, per, typ, txt))
+        self.doc.commit()
+        return _ok(set=n)
+
     # ---- groups ----
     def create_group(self, indices: List[int], name: Optional[str] = None):
         gid = self.doc.group_signals(list(indices), name)
@@ -269,6 +297,7 @@ _RESOURCES = {
         "Author waveforms ONLY through commands (never by writing JSON):\n"
         "  add_signal(name, fill) / remove_signals / rename_signal / set_offset / set_color\n"
         "  set_cell(signal, period, type, text) / fill(signal, start, end, type, text)\n"
+        "  set_cells([{signal, period, type, text}]) — many cells, one undo step (prefer for sequences)\n"
         "  set_periods(n)\n"
         "  create_group(indices, name) / merge_into_group / dissolve_group / delete_group\n"
         "  add_anchor(signal, period, edge) / add_edge(frm, to, label, style)\n"
@@ -289,7 +318,7 @@ _TOOLS = [
     "help",
     "get_document", "new_document", "open_document", "import_wavedrom", "render",
     "undo", "redo", "add_signal", "remove_signals", "rename_signal", "set_offset",
-    "set_color", "set_periods", "set_cell", "fill", "create_group",
+    "set_color", "set_periods", "set_cell", "set_cells", "fill", "create_group",
     "merge_into_group", "dissolve_group", "delete_group", "toggle_collapse",
     "set_group_color", "rename_group", "add_anchor", "add_edge",
     "list_templates", "insert_template",

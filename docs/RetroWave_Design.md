@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.46** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.47** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1155,9 +1155,11 @@ render an image.
   No model entry / no LLM is built into the app (a self-contained `spec_to_waveform` agent was
   considered and **rejected** — keeps the app dependency-free and avoids an unvalidated path).
 - **Command injection is the *only* authoring path.** The server holds one `Document` session and
-  exposes the §14.3 command catalog as tools (`add_signal`, `fill`, `create_group`, `add_anchor`,
-  …) plus `render` / `get_document` / `undo`. The LLM **builds and edits waveforms exclusively
-  through commands**, like a user clicking — it never hand-writes or edits the document JSON.
+  exposes the §14.3 command catalog as tools (`add_signals`, `set_cells`, `fill`, `create_group`,
+  `add_anchor`, …) plus `render` / `get_document` / `undo`. The LLM **builds and edits waveforms
+  exclusively through commands**, like a user clicking — it never hand-writes or edits the document
+  JSON. Cell/signal writes are plural-only (v1.47): one batch = one undo step, a single item is a
+  one-element list, so the model never faces a singular-vs-plural tool choice.
 - **The native document JSON is a persistence format, not an LLM authoring surface.** There is no
   tool that takes an AI-authored document blob. `open_document(path)` / `import_wavedrom(path)`
   only *load an existing saved file* (a RetroWave `.json` or a WaveDrom file) so the session can
@@ -1201,6 +1203,14 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.47** — **MCP tool slimming: plural-only write commands.** `add_signals([{name?, fill?}])`
+  joins `set_cells` as a batch command (atomic validation, one undo step, returns the new
+  `{index, name}` pairs), and the singular tools `add_signal` / `set_cell` are removed from the
+  advertised `_TOOLS` list — a single item is just a one-element list, so the plural form covers
+  both and the model never faces a singular-vs-plural choice (the `WaveSession` methods remain for
+  internal use and tests). The `waveform://commands` / `guide` resources and README now teach the
+  plural forms. Tests: `test_add_signals_batch_one_undo`, `test_add_signals_atomic_on_bad_entry`,
+  `test_singular_tools_removed_from_tool_list`.
 - **v1.46** — **MCP `set_cells` batch tool.** A new command tool sets many cells (each with its
   own type/text) in a single undo step, so a model can paint a whole sequence — e.g. the per-cycle
   BUS labels of an SPI/I2C frame — in one call instead of one `set_cell` round-trip per cell. Input

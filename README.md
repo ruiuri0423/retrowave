@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.45**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.47**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -63,8 +63,8 @@ immediately — and a short interactive tutorial on first launch.
 ### B · AI / MCP — AI-driven (experimental)
 
 Let an LLM in your AI session (Claude Code, Claude Desktop, …) **drive RetroWave by
-command injection** — it builds a diagram step by step (`add_signal`, `fill`,
-`create_group`, `add_anchor`, …) then `render`s it. The model authors *only* through
+command injection** — it builds a diagram step by step (`add_signals`, `set_cells`,
+`fill`, `create_group`, `add_anchor`, …) then `render`s it. The model authors *only* through
 commands; it never hand-writes the document JSON (`open_document` / `import_wavedrom`
 only load existing saved files). All paths launch the same stdio server, `run_mcp.py`.
 

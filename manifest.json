@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "retrowave",
   "display_name": "RetroWave",
-  "version": "1.46",
+  "version": "1.47",
   "description": "Drive the RetroWave waveform editor from your AI session by MCP command injection — build digital timing diagrams step by step and render them.",
   "author": { "name": "Ricky (ruiuri0423)" },
   "homepage": "https://github.com/ruiuri0423/retrowave",

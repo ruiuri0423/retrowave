@@ -152,10 +152,37 @@ class WaveSession:
 
     # ---- signals ----
     def add_signal(self, name: Optional[str] = None, fill: str = "L"):
+        # Not an MCP tool (the plural add_signals covers it); kept for internal use/tests.
         if fill not in WAVE_TYPES:
             return _err(f"fill must be one of {WAVE_TYPES}")
         idx = self.doc.add_signal(name, fill)
         return _ok(index=idx, name=self.model.signals[idx]["name"])
+
+    def add_signals(self, signals: List[dict]):
+        """Add one or many signals in ONE undo step (for a single signal pass a
+        one-element list). Each entry is {name?, fill?}: omit `name` for an
+        auto-generated one; `fill` paints every cell (CLK/H/L/BUS/HiZ/Unknown,
+        default "L"). Returns the new {index, name} pairs in order. Validated
+        atomically: any bad entry rejects the whole batch (nothing added, no
+        undo step)."""
+        norm = []
+        for i, s in enumerate(signals):
+            if not isinstance(s, dict):
+                return _err(f"signal {i}: must be an object with optional name/fill")
+            fill = s.get("fill", "L")
+            if fill not in WAVE_TYPES:
+                return _err(f"signal {i}: fill must be one of {WAVE_TYPES}")
+            name = s.get("name")
+            if name is not None and not isinstance(name, str):
+                return _err(f"signal {i}: name must be a string")
+            norm.append((name, fill))
+        self.doc.begin()
+        added = []
+        for name, fill in norm:
+            idx = self.doc.add_signal(name, fill)
+            added.append({"index": idx, "name": self.model.signals[idx]["name"]})
+        self.doc.commit()
+        return _ok(added=added)
 
     def remove_signals(self, indices: List[int]):
         return _ok(removed=self.doc.remove_signals(list(indices)))
@@ -175,6 +202,7 @@ class WaveSession:
 
     # ---- cells (drawing) ----
     def set_cell(self, signal: int, period: int, type: str, text: str = ""):
+        # Not an MCP tool (the plural set_cells covers it); kept for internal use/tests.
         if type not in WAVE_TYPES:
             return _err(f"type must be one of {WAVE_TYPES}")
         return _ok(set=self.doc.set_cell(signal, period, type, text))
@@ -196,12 +224,12 @@ class WaveSession:
         return _ok(filled=n)
 
     def set_cells(self, cells: List[dict]):
-        """Set MANY cells at once in ONE undo step — PREFER THIS over repeated
-        set_cell when painting a sequence (e.g. per-cycle BUS labels), it saves
-        round-trips. `cells` is a list of {signal, period, type, text?} objects
-        (`type` ∈ CLK/H/L/BUS/HiZ/Unknown; `text` is the BUS label, default "").
-        Validated atomically: if ANY entry is malformed or out of range nothing
-        is changed and ok=False is returned (no partial writes, no undo step)."""
+        """Set one or many cells in ONE undo step (for a single cell pass a
+        one-element list). `cells` is a list of {signal, period, type, text?}
+        objects (`type` ∈ CLK/H/L/BUS/HiZ/Unknown; `text` is the BUS label,
+        default ""). Use `fill` instead for a run of the SAME value. Validated
+        atomically: if ANY entry is malformed or out of range nothing is
+        changed and ok=False is returned (no partial writes, no undo step)."""
         n_sig, n_per = len(self.model.signals), self.model.n_periods
         norm = []
         for i, c in enumerate(cells):
@@ -295,9 +323,9 @@ _RESOURCES = {
         "(one per period). BUS cells carry a text value. Build via commands only.",
     "waveform://commands":
         "Author waveforms ONLY through commands (never by writing JSON):\n"
-        "  add_signal(name, fill) / remove_signals / rename_signal / set_offset / set_color\n"
-        "  set_cell(signal, period, type, text) / fill(signal, start, end, type, text)\n"
-        "  set_cells([{signal, period, type, text}]) — many cells, one undo step (prefer for sequences)\n"
+        "  add_signals([{name, fill}]) / remove_signals / rename_signal / set_offset / set_color\n"
+        "  set_cells([{signal, period, type, text}]) — one undo step; single cell = one-element list\n"
+        "  fill(signal, start, end, type, text) — a run of the SAME value on one signal\n"
         "  set_periods(n)\n"
         "  create_group(indices, name) / merge_into_group / dissolve_group / delete_group\n"
         "  add_anchor(signal, period, edge) / add_edge(frm, to, label, style)\n"
@@ -307,9 +335,11 @@ _RESOURCES = {
     "waveform://guide":
         "Example — an SPI burst:\n"
         "1. new_document(); set_periods(12)\n"
-        "2. add_signal('CLK','CLK'); fill(0,0,11,'CLK')\n"
-        "3. add_signal('CS_N','H'); fill(1,2,8,'L')\n"
-        "4. add_signal('MOSI','HiZ'); set_cell(2,2,'BUS','CMD'); fill(2,3,4,'BUS','ADDR')\n"
+        "2. add_signals([{'name':'CLK','fill':'CLK'}, {'name':'CS_N','fill':'H'},\n"
+        "                {'name':'MOSI','fill':'HiZ'}])\n"
+        "3. fill(1,2,8,'L')  # CS_N active-low window\n"
+        "4. set_cells([{'signal':2,'period':2,'type':'BUS','text':'CMD'},\n"
+        "              {'signal':2,'period':3,'type':'BUS','text':'ADDR'}])\n"
         "5. create_group([1,2],'SPI'); render()",
 }
 
@@ -317,8 +347,8 @@ _RESOURCES = {
 _TOOLS = [
     "help",
     "get_document", "new_document", "open_document", "import_wavedrom", "render",
-    "undo", "redo", "add_signal", "remove_signals", "rename_signal", "set_offset",
-    "set_color", "set_periods", "set_cell", "set_cells", "fill", "create_group",
+    "undo", "redo", "add_signals", "remove_signals", "rename_signal", "set_offset",
+    "set_color", "set_periods", "set_cells", "fill", "create_group",
     "merge_into_group", "dissolve_group", "delete_group", "toggle_collapse",
     "set_group_color", "rename_group", "add_anchor", "add_edge",
     "list_templates", "insert_template",

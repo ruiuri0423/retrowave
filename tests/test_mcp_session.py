@@ -43,6 +43,38 @@ def test_fill_is_single_undo_step(s):
     assert_invariants(s.model)
 
 
+def test_add_signals_batch_one_undo(s):
+    """Many signals (named/auto, custom fill) land in one undo step."""
+    s.doc._undo.clear()
+    n0 = len(s.model.signals)
+    r = s.add_signals(signals=[{"name": "SCL", "fill": "H"}, {"name": "SDA"}, {}])
+    assert r["ok"] and len(r["added"]) == 3
+    assert [a["name"] for a in r["added"]][:2] == ["SCL", "SDA"]
+    assert len(s.model.signals) == n0 + 3
+    assert s.model.signals[r["added"][0]["index"]]["cells"][0]["type"] == "H"
+    assert s.doc.history()[0] == 1            # one undo unit for the whole batch
+    s.undo()
+    assert len(s.model.signals) == n0
+    assert_invariants(s.model)
+
+
+def test_add_signals_atomic_on_bad_entry(s):
+    """A bad fill rejects the whole batch — nothing added, no undo step."""
+    s.doc._undo.clear()
+    n0 = len(s.model.signals)
+    r = s.add_signals(signals=[{"name": "OK"}, {"fill": "NOPE"}])
+    assert r["ok"] is False and len(s.model.signals) == n0
+    assert s.doc.history()[0] == 0
+    assert_invariants(s.model)
+
+
+def test_singular_tools_removed_from_tool_list():
+    """v1.47: plural-only surface — a single item is a one-element list."""
+    from retrowave import mcp_server
+    assert "set_cell" not in mcp_server._TOOLS and "add_signal" not in mcp_server._TOOLS
+    assert "set_cells" in mcp_server._TOOLS and "add_signals" in mcp_server._TOOLS
+
+
 def test_set_cells_batch_one_undo(s):
     """Many cells with distinct values land in a single undo step."""
     s.doc._undo.clear()
@@ -208,8 +240,10 @@ def test_fastmcp_server_builds():
     # Regression: type annotations must yield integer/array schemas (not string),
     # otherwise int comparisons inside Document fail at call time.
     by = {t.name: t.inputSchema["properties"] for t in tools}
-    assert by["set_cell"]["signal"]["type"] == "integer"
-    assert by["set_cell"]["period"]["type"] == "integer"
+    assert by["fill"]["signal"]["type"] == "integer"
+    assert by["fill"]["start"]["type"] == "integer"
+    assert by["set_cells"]["cells"]["type"] == "array"
+    assert by["add_signals"]["signals"]["type"] == "array"
     assert by["remove_signals"]["indices"]["type"] == "array"
     assert by["create_group"]["indices"]["type"] == "array"
     assert by["set_offset"]["value"]["type"] == "number"

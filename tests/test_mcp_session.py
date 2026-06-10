@@ -103,9 +103,33 @@ def test_render_svg_no_pillow_needed(s):
 def test_render_png_when_pillow(s):
     import os
     pytest.importorskip("PIL")
-    r = s.render(format="png", scale=1)
+    r = s.render(format="png", scale=1)                # inline defaults to False
     assert r["ok"] and r["path"].endswith(".png") and r["bytes"] > 0
     assert os.path.exists(r["path"]) and "image_base64" not in r   # no giant blob
+
+
+def test_render_inline_returns_image_block(s):
+    pytest.importorskip("PIL")
+    pytest.importorskip("mcp")
+    from mcp.server.fastmcp import Image
+    r = s.render(format="png", scale=1, inline=True)
+    assert isinstance(r, Image)                        # MCP image content block, not a dict
+
+
+def test_render_inline_falls_back_without_mcp(s, monkeypatch):
+    """inline=True is safe even if `mcp` is absent: it degrades to the path result."""
+    pytest.importorskip("PIL")
+    import builtins
+    real_import = builtins.__import__
+
+    def no_mcp(name, *a, **k):
+        if name.startswith("mcp"):
+            raise ImportError("mcp not installed")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", no_mcp)
+    r = s.render(format="png", scale=1, inline=True)
+    assert r["ok"] and r["path"].endswith(".png") and "inline_unavailable" in r
 
 
 def test_render_unknown_format(s):

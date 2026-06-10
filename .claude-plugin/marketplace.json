@@ -1,0 +1,16 @@
+{
+  "name": "ruiuri0423-retrowave",
+  "owner": { "name": "Ricky (ruiuri0423)" },
+  "metadata": {
+    "description": "RetroWave plugins for Claude Code.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "retrowave",
+      "source": "./",
+      "description": "Drive the RetroWave waveform editor by MCP command injection (build & render digital timing diagrams).",
+      "category": "developer-tools"
+    }
+  ]
+}

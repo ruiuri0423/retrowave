@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.43** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.44** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1164,11 +1164,17 @@ render an image.
   then continue editing it via commands or render it. Flat command arguments also sidestep the
   recursive-`group_tree` limitation of strict structured outputs. WaveDrom (v1.34) is a validated
   interop format for opening existing files, not the primary LLM language.
-- **Headless only for now.** Returns the rendered PNG inline (MCP image block) + the document.
-  An interactive mode (pop the GUI to confirm/edit) is **shelved**, to be reconsidered by usage.
+- **Headless only for now.** `render` writes a file and returns its path by default (engineering
+  users want the saved artifact, and an inline image is a large payload); `render(inline=True)`
+  additionally returns the PNG as an MCP image block for in-session display. An interactive mode
+  (pop the GUI to confirm/edit) is **shelved**, to be reconsidered by usage.
 - **Resources** teach the model: `waveform://schema` (document schema + element vocabulary),
   `waveform://commands` (the command reference), `waveform://guide` (few-shot spec→commands→image).
-- **Transport: stdio MVP** (local plugin via `.mcp.json`); SSE/HTTP deferred until after v1.35.
+- **Transport: stdio MVP**; SSE/HTTP deferred until after v1.35. Three install paths ship the same
+  stdio server (all point at `run_mcp.py`): a **Claude Code plugin** (`.claude-plugin/plugin.json`
+  with `mcpServers` using `${CLAUDE_PLUGIN_ROOT}`, plus a `marketplace.json` so the repo is its own
+  marketplace), a **Claude Desktop bundle** (root `manifest.json`, `${__dirname}`, packed with
+  `mcpb pack` into a `.mcpb`), and a **manual `.mcp.json`** fallback.
 
 **Implementation (v1.35).** `mcp_server.py` splits in two: `WaveSession` (holds one `Document`,
 exposes the command catalog + `render`/`get_document`/`open_document`/`import_wavedrom`/`undo` as
@@ -1188,6 +1194,15 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.44** — **MCP install paths + optional inline `render`.** (1) Ship three ways to install the
+  MCP server, all wrapping the same stdio `run_mcp.py`: a **Claude Code plugin**
+  (`.claude-plugin/plugin.json` + `marketplace.json`, install via `/plugin marketplace add
+  ruiuri0423/retrowave` → `/plugin install retrowave@ruiuri0423-retrowave`), a **Claude Desktop
+  bundle** (root `manifest.json`, `mcpb pack` → drag-drop `.mcpb`), and the existing manual
+  `.mcp.json`. (2) `render` gains `inline` (**default False** — engineers want the saved file;
+  inline bytes are large); `inline=True` returns the PNG as an MCP image block for in-session
+  display, degrading to the path result if `mcp` isn't importable. Tests:
+  `test_render_inline_returns_image_block`, `test_render_inline_falls_back_without_mcp`.
 - **v1.43** — **Cycle highlight: Shift = range select (matches the name column).** Shift+click on
   a period header now selects the whole contiguous range from the last-clicked column (tracked as
   `_cycle_anchor`), Ctrl+click adds/removes a single column, and a plain click is single — the same

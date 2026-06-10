@@ -9,7 +9,7 @@ templates, and export to PNG, SVG or EPS.
 
 ![Drawing a waveform step by step](assets/demo.gif)
 
-> Status: prototype **v1.43**. A small Python package (`src/retrowave/`) with strict
+> Status: prototype **v1.44**. A small Python package (`src/retrowave/`) with strict
 > three-tier layering — logic (`model`), transfer (`document`: commands, change events,
 > undo), and application (headless drawing + a tkinter shell); only `app.py` touches
 > tkinter. No third-party dependencies required to run (Pillow is optional, PNG export only).
@@ -214,21 +214,55 @@ never duplicated.
 
 ## AI / MCP plugin (experimental)
 
-RetroWave ships an [MCP](https://modelcontextprotocol.io/) server so an LLM in your
-AI session (Claude Desktop, Claude Code, …) can **drive RetroWave by command
-injection** — it builds a diagram step by step (`add_signal`, `fill`, `create_group`,
-`add_anchor`, …), then `render`s an image. The model authors *only* through commands;
-it never hand-writes the document JSON. `open_document` / `import_wavedrom` only load
-existing saved files.
+There are **two ways to use RetroWave**:
+
+- **Human-driven (GUI):** run the app and draw with the mouse/keyboard — see
+  [Getting started](#getting-started) above.
+- **AI-driven (MCP):** let an LLM in your AI session (Claude Code, Claude Desktop, …)
+  **drive RetroWave by command injection** — it builds a diagram step by step
+  (`add_signal`, `fill`, `create_group`, `add_anchor`, …), then `render`s it. The model
+  authors *only* through commands; it never hand-writes the document JSON.
+  `open_document` / `import_wavedrom` only load existing saved files.
+
+> **Prerequisite for every AI-driven path:** Python 3.8+ on `PATH`, plus
+> `pip install mcp pillow` (`mcp` = the server runtime; `pillow` = PNG rendering — SVG
+> needs neither). All paths launch the same stdio server, `run_mcp.py`.
+
+### Install
+
+**A. Claude Code — plugin marketplace** (recommended for Claude Code)
+
+```text
+/plugin marketplace add ruiuri0423/retrowave
+/plugin install retrowave@ruiuri0423-retrowave
+```
+
+The plugin manifest (`.claude-plugin/plugin.json`) wires the server with
+`${CLAUDE_PLUGIN_ROOT}`, so it works wherever the plugin is checked out — no absolute
+paths to edit.
+
+**B. Claude Desktop — `.mcpb` bundle** (drag-and-drop, lowest friction)
+
+Build a bundle from the repo and install it via **Settings → Extensions**:
 
 ```bash
-pip install mcp pillow          # mcp = server runtime; pillow = PNG rendering
-python run_mcp.py               # starts the stdio MCP server (Ctrl+C to stop)
+npm install -g @anthropic-ai/mcpb     # one-time
+mcpb pack                             # packs manifest.json + repo into retrowave.mcpb
+```
+
+Then drag `retrowave.mcpb` onto the Extensions pane. (The bundle uses `${__dirname}`, so
+it's relocatable; you can optionally bundle a Python runtime so end-users need none.)
+
+**C. Manual `.mcp.json`** (any MCP client / fallback)
+
+```bash
+pip install mcp pillow
+python run_mcp.py        # starts the stdio MCP server (Ctrl+C to stop); diagnostics on stderr
 ```
 
 `run_mcp.py` is the run-layer for MCP (the counterpart of `run.py`, which starts the
-GUI) — it puts `src/` on the path itself, so an MCP client can point straight at it.
-Register it with any MCP client (example `.mcp.json`, use the absolute path):
+GUI) — it puts `src/` on the path itself, so a client can point straight at it. Register
+it with the **absolute** path:
 
 ```json
 {
@@ -240,6 +274,14 @@ Register it with any MCP client (example `.mcp.json`, use the absolute path):
   }
 }
 ```
+
+### Use
+
+Once connected, just ask the model to draw a timing diagram. It reads the bundled
+`waveform://schema|commands|guide` resources (or calls the `help` tool), builds the
+waveform through commands, and calls `render` — which by default writes a PNG/SVG file
+and returns its **path** (handy for engineers who want the saved artifact). Ask for
+`render(inline=True)` to instead get the image **inline in the session**.
 
 The command logic is covered by `tests/test_mcp_session.py`; the stdio wiring needs
 `mcp` installed and is best verified by plugging it into a client.

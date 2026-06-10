@@ -111,11 +111,15 @@ class WaveSession:
         return _ok(redone=self.doc.redo(), **{"history": self.doc.history()})
 
     # ---- render ----
-    def render(self, format: str = "png", scale: int = 2, path: Optional[str] = None):
+    def render(self, format: str = "png", scale: int = 2, path: Optional[str] = None,
+               inline: bool = False):
         """Render the current diagram to a file and return its PATH (read the file
-        to view it). PNG needs Pillow; SVG is zero-dependency. The image bytes are
-        deliberately NOT inlined — a base64/markup blob would overflow the tool
-        result; the caller opens `path` instead."""
+        to view it). PNG needs Pillow; SVG is zero-dependency.
+
+        `inline` defaults to **False** — RetroWave's users are mostly engineers who
+        want the saved file, and an inline image is a large payload. Pass
+        `inline=True` to instead return the PNG as an MCP image block so it
+        displays directly in the session (PNG only; SVG always returns a path)."""
         fmt = format.lower()
         if path is None:
             path = os.path.join(self._outdir, f"waveform.{fmt}")
@@ -123,6 +127,8 @@ class WaveSession:
             if fmt == "png":
                 export_png(self.model, self.geom, path, scale=scale)
                 size = os.path.getsize(path)
+                if inline:
+                    return self._inline_png(path, size)
                 return _ok(format="png", path=path, bytes=size)
             if fmt == "svg":
                 export_svg(self.model, self.geom, path)
@@ -132,6 +138,17 @@ class WaveSession:
             return _err("PNG export needs Pillow (pip install pillow); try format='svg'")
         except Exception as ex:
             return _err(f"render failed: {ex}")
+
+    @staticmethod
+    def _inline_png(path, size):
+        """Wrap a rendered PNG in a FastMCP image block. Falls back to the path
+        result if `mcp` isn't installed (so headless callers/tests still work)."""
+        try:
+            from mcp.server.fastmcp import Image
+        except ImportError:
+            return _ok(format="png", path=path, bytes=size,
+                       inline_unavailable="mcp not installed; returning path")
+        return Image(path=path)
 
     # ---- signals ----
     def add_signal(self, name: Optional[str] = None, fill: str = "L"):

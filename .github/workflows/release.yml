@@ -3,6 +3,10 @@ name: Release (Windows onefile)
 # Trigger: pushing a v* tag (e.g. v1.27) automatically builds and publishes a Release;
 # can also be triggered manually to only produce the artifact.
 #
+# Release assets: onefile exe + onedir zip (GUI), RetroWave-vX.Y.mcpb (Claude Desktop
+# MCP bundle, packed with @anthropic-ai/mcpb after a version-consistency gate), and
+# SHA256SUMS.txt covering all of them.
+#
 # Antivirus/SmartScreen mitigations:
 #   - embed version-info metadata (missing metadata is a heuristic penalty), --noupx
 #   - also produce an onedir zip (no self-extraction, far lower false-positive rate than
@@ -47,6 +51,32 @@ jobs:
         run: |
           $v = python -c "import sys; sys.path.insert(0,'src'); import retrowave; print(retrowave.__version__)"
           "version=$v" >> $env:GITHUB_OUTPUT
+
+      # The version lives in several files (see CLAUDE.md / docs): fail the release
+      # rather than ship a bundle whose manifest disagrees with the code.
+      - name: Version consistency gate (__version__ / manifest.json / plugin.json / tag)
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $m = python -c "import json; print(json.load(open('manifest.json', encoding='utf-8'))['version'])"
+          $p = python -c "import json; print(json.load(open('.claude-plugin/plugin.json', encoding='utf-8'))['version'])"
+          if ($m -ne $v -or $p -ne $v) {
+            Write-Error "version mismatch: __version__=$v manifest.json=$m plugin.json=$p"; exit 1
+          }
+          if ("${{ github.ref }}".StartsWith("refs/tags/") -and "${{ github.ref_name }}" -ne "v$v") {
+            Write-Error "tag ${{ github.ref_name }} does not match code version v$v"; exit 1
+          }
+
+      # Pack the MCP bundle while the workspace is still clean (before PyInstaller
+      # creates build/dist/*.spec). .mcpbignore also excludes those defensively.
+      - name: Build MCP bundle (.mcpb)
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          npm install -g "@anthropic-ai/mcpb"
+          mcpb validate manifest.json
+          mcpb pack . "RetroWave-v$v.mcpb"
+          mcpb info "RetroWave-v$v.mcpb"
 
       - name: Generate Windows version-info resource
         shell: pwsh
@@ -108,6 +138,7 @@ jobs:
           $v = "${{ steps.ver.outputs.version }}"
           Rename-Item dist/RetroWave.exe "RetroWave-v$v-windows.exe"
           Compress-Archive -Path dist_onedir/RetroWave -DestinationPath "dist/RetroWave-v$v-windows-onedir.zip"
+          Move-Item "RetroWave-v$v.mcpb" dist/
           $files = Get-ChildItem dist | Where-Object { $_.Name -match '^RetroWave' }
           $lines = $files | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.Name }
           $lines | Out-File -Encoding ascii dist/SHA256SUMS.txt
@@ -121,6 +152,7 @@ jobs:
           path: |
             dist/RetroWave-v${{ steps.ver.outputs.version }}-windows.exe
             dist/RetroWave-v${{ steps.ver.outputs.version }}-windows-onedir.zip
+            dist/RetroWave-v${{ steps.ver.outputs.version }}.mcpb
             dist/SHA256SUMS.txt
 
       - name: Create GitHub Release
@@ -130,5 +162,6 @@ jobs:
           files: |
             dist/RetroWave-v${{ steps.ver.outputs.version }}-windows.exe
             dist/RetroWave-v${{ steps.ver.outputs.version }}-windows-onedir.zip
+            dist/RetroWave-v${{ steps.ver.outputs.version }}.mcpb
             dist/SHA256SUMS.txt
           generate_release_notes: true

@@ -21,3 +21,11 @@ test.json
 __pycache__
 *.pyc
 .pytest_cache
+
+# CI / PyInstaller build artifacts (present when packing on a build machine)
+build
+dist
+dist_onedir
+version_info.txt
+*.spec
+node_modules

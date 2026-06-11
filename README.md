@@ -85,11 +85,13 @@ only load existing saved files). All paths launch the same stdio server, `run_mc
    works wherever the plugin is checked out — no paths to edit.
 
 2. **Claude Desktop — `.mcpb` bundle** (drag-and-drop):
+   grab the prebuilt `RetroWave-vX.Y.mcpb` from the [Releases](../../releases) page
+   (attached automatically from tags after v1.51), or build it yourself:
    ```bash
    npm install -g @anthropic-ai/mcpb     # one-time
    mcpb pack                             # manifest.json + repo -> retrowave.mcpb
    ```
-   Then drag `retrowave.mcpb` into **Settings → Extensions** and confirm. The bundle
+   Then drag the `.mcpb` into **Settings → Extensions** and confirm. The bundle
    uses `${__dirname}`, so it's relocatable.
 
 3. **Manual `.mcp.json`** (any MCP client / fallback) — register `run_mcp.py` with its

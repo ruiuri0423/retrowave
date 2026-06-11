@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.49** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.50** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1203,6 +1203,12 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.50** — **Gesture mode: hand cursor restored after a long-press pan.** The `fleur` (pan)
+  cursor shown during a gesture long-press is intentional — it is the same pan affordance as Esc
+  pan mode — but on release the canvas cursor stayed `fleur` while the mode had already returned
+  to tap-to-select; it now flips back to `hand2`. Esc pan mode (non-gesture) correctly keeps
+  `fleur` across drags. Found in real use (v1.42-style feedback). Guards:
+  `test_gesture_longpress_cursor_restored_on_release`, `test_pan_mode_cursor_stays_fleur_after_pan`.
 - **v1.49** — **MCP: stale-index warnings in the tool contracts.** Signal indices are coordinates
   into the current DFS leaf order — valid only against the state they were read from; a reordering
   command silently invalidates them (an in-range stale index targets the wrong signal without any

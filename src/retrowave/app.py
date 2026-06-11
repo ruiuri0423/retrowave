@@ -816,6 +816,8 @@ class App(tk.Tk):
         if self._panning:
             self._panning = False; self._pan_anchor = None
             self._cancel_longpress(); self._g_press = None
+            if self._gesture_mode:                 # long-press pan over -> back to tap-to-select
+                self.wave_cv.configure(cursor="hand2")
             return
         if self._g_press is not None:              # gesture tap (no move / no long-press) -> select + palette
             self._cancel_longpress()

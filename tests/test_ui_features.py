@@ -95,6 +95,28 @@ def test_gesture_longpress_enters_pan(app):
     assert app._panning is False
 
 
+def test_gesture_longpress_cursor_restored_on_release(app):
+    """Long-press shows the pan cursor (fleur); releasing must restore the
+    gesture-mode hand cursor (was lingering as fleur)."""
+    app._gesture_mode = True
+    app.wave_cv.configure(cursor="hand2")
+    app.on_press(Ev(*cell_xy(app, 2, 4)))
+    app._gesture_longpress()
+    assert str(app.wave_cv.cget("cursor")) == "fleur"     # pan affordance while held
+    app.on_release(Ev(*cell_xy(app, 2, 4)))
+    assert str(app.wave_cv.cget("cursor")) == "hand2"     # back to tap-to-select
+
+
+def test_pan_mode_cursor_stays_fleur_after_pan(app):
+    """Outside gesture mode, Esc pan mode keeps the fleur cursor across drags
+    (still in pan mode until a tool is picked)."""
+    app._enter_pan_mode()
+    assert str(app.wave_cv.cget("cursor")) == "fleur"
+    x, y = cell_xy(app, 2, 4)
+    app.on_press(Ev(x, y)); app.on_motion(Ev(x + 30, y)); app.on_release(Ev(x + 30, y))
+    assert str(app.wave_cv.cget("cursor")) == "fleur"
+
+
 def test_gesture_drag_promotes_to_pan_not_paint(app):
     app._gesture_mode = True; app._set_tool("H")
     x, y = cell_xy(app, 2, 4)

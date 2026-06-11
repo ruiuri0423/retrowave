@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.50** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.51** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1203,6 +1203,11 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.51** — **File menu: "New…" gets its ellipsis (both languages).** The New item opens a
+  confirmation dialog, so by menu convention it carries an ellipsis like its Load…/Save…
+  siblings — previously it read plain "New"/"新增 (New)". The menu now uses a distinct catalog
+  key `New...` ("新增… (New)"); the bare `New` key remains as the confirm-dialog title, which
+  correctly stays ellipsis-free.
 - **v1.50** — **Gesture mode: hand cursor restored after a long-press pan.** The `fleur` (pan)
   cursor shown during a gesture long-press is intentional — it is the same pan affordance as Esc
   pan mode — but on release the canvas cursor stayed `fleur` while the mode had already returned

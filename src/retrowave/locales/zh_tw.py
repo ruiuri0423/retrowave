@@ -25,7 +25,8 @@ TRANSLATIONS = {
     "Help": "說明 (Help)",
 
     # ---- File menu ----
-    "New": "新增 (New)",
+    "New...": "新增… (New)",      # menu item (opens a confirm dialog)
+    "New": "新增 (New)",          # dialog title (no ellipsis)
     "Load...": "開啟… (Load)",
     "Save...": "儲存… (Save)",
     "Import Template...": "匯入範本… (Import Template)",

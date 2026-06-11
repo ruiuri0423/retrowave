@@ -138,7 +138,7 @@ class App(tk.Tk):
         bar = tk.Frame(self, bg=Style.FACE, bd=1, relief=tk.RAISED); bar.pack(side=tk.TOP, fill=tk.X)
         fmb = tk.Menubutton(bar, text=tr("File"), font=Style.UI_FONT, bg=Style.FACE, padx=10, pady=2)
         fm = tk.Menu(fmb, tearoff=0, bg=Style.FACE, font=Style.UI_FONT)
-        fm.add_command(label=tr("New") + "\tCtrl+N", command=self.do_new)
+        fm.add_command(label=tr("New...") + "\tCtrl+N", command=self.do_new)
         fm.add_command(label=tr("Load...") + "\tCtrl+O", command=self.do_open)
         fm.add_command(label=tr("Save...") + "\tCtrl+S", command=self.do_save)
         fm.add_separator()

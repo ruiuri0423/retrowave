@@ -1,6 +1,6 @@
 {
   "name": "retrowave",
-  "version": "1.48",
+  "version": "1.49",
   "description": "Drive the RetroWave waveform editor from your AI session by MCP command injection — build digital timing diagrams step by step (add_signal, fill, create_group, add_anchor, ...) and render them.",
   "author": { "name": "Ricky (ruiuri0423)" },
   "homepage": "https://github.com/ruiuri0423/retrowave",

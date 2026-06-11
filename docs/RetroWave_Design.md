@@ -1,6 +1,6 @@
 # RetroWave — Design Specification
 
-**Spec version: v1.48** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
+**Spec version: v1.49** &nbsp;·&nbsp; tracks the implementation version (`retrowave.__version__`). Keep this
 header, the program version string, and `README.md` in lock-step on every change. See the
 [Changelog](#16-changelog) at the end.
 
@@ -1203,6 +1203,15 @@ Versioned to match the `retrowave.py` implementation. Newest first. When adding 
 changing behaviour, bump the version in three places — the program string, this spec's header, and
 `README.md` — and add a line here.
 
+- **v1.49** — **MCP: stale-index warnings in the tool contracts.** Signal indices are coordinates
+  into the current DFS leaf order — valid only against the state they were read from; a reordering
+  command silently invalidates them (an in-range stale index targets the wrong signal without any
+  error). The six index-shifting tools (`remove_signals`, `create_group`, `merge_into_group`,
+  `delete_group`, `undo`, `redo`) now state this in their docstrings — which ARE the tool
+  descriptions the model reads — instructing a `get_document` re-read before further index-based
+  commands. `dissolve_group` deliberately carries no warning (in-place promotion preserves leaf
+  order). Guidance-only change (option B of the stale-index hardening plan; returning fresh
+  index maps from those commands — option A — is deferred until real use shows it's needed).
 - **v1.48** — **Model/Document move API consolidated to plural-only, unified signatures.**
   `move_leaf_to` is removed at both layers — `move_leaves_to({sid}, …)` covers the single-signal
   case (same marker method, and the rule-4 downward off-by-one regression coverage now runs

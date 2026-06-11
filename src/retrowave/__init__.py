@@ -5,7 +5,7 @@ A pure standard-library tkinter digital timing/waveform editor (PNG export needs
 Package layering (design spec §14): logic units (model/templates) and drawing units
 (elements/engine/backends/export) are fully headless; only the app module imports tkinter.
 """
-__version__ = "1.48"
+__version__ = "1.49"
 
 from .backends import PILCanvas, SVGCanvas
 from .document import Document

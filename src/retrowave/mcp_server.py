@@ -105,9 +105,13 @@ class WaveSession:
         return self.get_document()
 
     def undo(self):
+        """Undo the last step. The whole document may change shape — re-read
+        get_document before any further index-based command."""
         return _ok(undone=self.doc.undo(), **{"history": self.doc.history()})
 
     def redo(self):
+        """Redo the last undone step. The whole document may change shape —
+        re-read get_document before any further index-based command."""
         return _ok(redone=self.doc.redo(), **{"history": self.doc.history()})
 
     # ---- render ----
@@ -185,6 +189,8 @@ class WaveSession:
         return _ok(added=added)
 
     def remove_signals(self, indices: List[int]):
+        """Remove the given signals. Remaining signal indices SHIFT after this —
+        re-read get_document before any further index-based command."""
         return _ok(removed=self.doc.remove_signals(list(indices)))
 
     def rename_signal(self, index: int, name: str):
@@ -253,10 +259,14 @@ class WaveSession:
 
     # ---- groups ----
     def create_group(self, indices: List[int], name: Optional[str] = None):
+        """Group the given signals (they are moved to be contiguous). Signal
+        indices may SHIFT — re-read get_document before further index-based commands."""
         gid = self.doc.group_signals(list(indices), name)
         return _ok(gid=gid) if gid else _err("could not create group (empty selection?)")
 
     def merge_into_group(self, indices: List[int], gid: str):
+        """Move the given signals into an existing group. Signal indices may
+        SHIFT — re-read get_document before further index-based commands."""
         return (_ok(gid=gid) if self.doc.merge_into_group(list(indices), gid)
                 else _err("merge failed (bad gid?)"))
 
@@ -264,6 +274,8 @@ class WaveSession:
         return _ok(dissolved=self.doc.ungroup([gid]))
 
     def delete_group(self, gid: str):
+        """Delete a group AND all its member signals. Remaining signal indices
+        SHIFT — re-read get_document before further index-based commands."""
         return _ok(deleted_signals=self.doc.delete_group(gid))
 
     def toggle_collapse(self, gid: str):

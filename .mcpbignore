@@ -16,7 +16,7 @@ run.py
 test.json
 *.png
 *.gif
-_*.py
+/_*.py
 *.mcpb
 __pycache__
 *.pyc

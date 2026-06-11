@@ -30,6 +30,10 @@ docs/COWORK_INSTRUCTIONS.md
 /test.json
 /*.png
 /_*.py
+/_*.json
+
+# Built MCP bundles (build artifact; users build with `mcpb pack`)
+*.mcpb
 
 # Local Claude Code MCP wiring (machine-specific; not for the repo)
 .mcp.json

@@ -1,0 +1,23 @@
+# Keep the bundle to what the MCP server needs: manifest.json, run_mcp.py,
+# src/retrowave/**, LICENSE, README.md. Everything else stays out —
+# especially local-only files that are gitignored but present on disk.
+.git
+.github
+.gitignore
+.claude
+.claude-plugin
+.mcp.json
+.mcpbignore
+CLAUDE.md
+docs
+tests
+assets
+run.py
+test.json
+*.png
+*.gif
+_*.py
+*.mcpb
+__pycache__
+*.pyc
+.pytest_cache
